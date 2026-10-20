@@ -7,27 +7,27 @@ const IP = process.env.IP || '::';
 const DB_FILE = './database.json';
 const ADMIN_PIN = process.env.ADMIN_PIN || "3418";
 
-// Лимит 20mb для загрузки фото высокого качества
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json());
 app.use(express.static('public'));
 
 function getData() { 
-    let data = { spots: [], blockers: [], surveys: [] };
+    let data = { spots: [], blockers: [], surveys: [], config: { topCount: 16, bottomCount: 14 } };
     if (fs.existsSync(DB_FILE)) {
         try { data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')); } catch(e){}
     }
-    // Если точек нет, создаем базовые с координатами
+    if (!data.config) data.config = { topCount: 16, bottomCount: 14 };
+    
+    // Инициализация мест под геометрию двора (16 сверху, 14 снизу = 30 мест)
+    const total = data.config.topCount + data.config.bottomCount;
     if (!data.spots || data.spots.length === 0) {
-        data.spots = [
-            { id: 1, x: 12, y: 35, occupiedBy: null },
-            { id: 2, x: 18, y: 35, occupiedBy: null },
-            { id: 3, x: 24, y: 35, occupiedBy: null },
-            { id: 4, x: 30, y: 35, occupiedBy: null },
-            { id: 5, x: 12, y: 62, occupiedBy: null },
-            { id: 6, x: 18, y: 62, occupiedBy: null },
-            { id: 7, x: 24, y: 62, occupiedBy: null },
-            { id: 8, x: 30, y: 62, occupiedBy: null }
-        ];
+        data.spots = [];
+        for (let i = 1; i <= total; i++) {
+            data.spots.push({
+                id: i,
+                row: i <= data.config.topCount ? 'top' : 'bottom',
+                occupiedBy: null
+            });
+        }
     }
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
@@ -46,26 +46,31 @@ app.post('/api/admin/login', (req, res) => {
     res.json({ success: req.body.pin === ADMIN_PIN });
 });
 
-// АДМИН: Сохранить координаты мест
-app.post('/api/admin/spots/layout', (req, res) => {
+// АДМИН: Настройка количества мест в рядах
+app.post('/api/admin/config-rows', (req, res) => {
     if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
+    const { topCount, bottomCount } = req.body;
     const data = getData();
-    data.spots = req.body.spots;
+    data.config = { topCount: parseInt(topCount), bottomCount: parseInt(bottomCount) };
+    
+    const total = data.config.topCount + data.config.bottomCount;
+    const oldSpots = data.spots || [];
+    data.spots = [];
+    for (let i = 1; i <= total; i++) {
+        const old = oldSpots.find(s => s.id === i);
+        data.spots.push({
+            id: i,
+            row: i <= data.config.topCount ? 'top' : 'bottom',
+            occupiedBy: old ? old.occupiedBy : null
+        });
+    }
     saveData(data);
-    res.json({ success: true });
-});
-
-// АДМИН: Загрузка фото двора
-app.post('/api/admin/upload-yard', (req, res) => {
-    if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
-    const base64Data = req.body.image.replace(/^data:image\/\w+;base64,/, "");
-    fs.writeFileSync('./public/yard.jpg', Buffer.from(base64Data, 'base64'));
     res.json({ success: true });
 });
 
 app.post('/api/park/row1', (req, res) => {
     let { spotId, carNumber, phone, apt } = req.body;
-    if (!carNumber) return res.status(400).json({ error: 'Номер авто обязателен' });
+    if (!carNumber) return res.status(400).json({ error: 'Номер обязателен' });
 
     const data = getData();
     const spot = data.spots.find(s => s.id === spotId);
@@ -164,5 +169,5 @@ app.post('/api/admin/surveys', (req, res) => {
 });
 
 app.listen(PORT, IP, () => {
-    console.log(`Сервер слушает на [${IP}]:${PORT}`);
+    console.log(`Сервер двора запущен на [${IP}]:${PORT}`);
 });

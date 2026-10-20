@@ -1,7 +1,6 @@
-let parkingData = { spots: [], blockers: [] };
+let parkingData = { spots: [], blockers: [], config: { topCount: 16, bottomCount: 14 } };
 let isAdmin = false;
 let adminPin = "";
-let isEditMode = false;
 let r2Selected = [];
 
 async function loadData() {
@@ -17,8 +16,10 @@ async function loadData() {
 function render() {
     const spots = parkingData.spots || [];
     const blockers = parkingData.blockers || [];
-    const layer = document.getElementById('markersLayer');
-    layer.innerHTML = '';
+    const topContainer = document.getElementById('stallsTop');
+    const bottomContainer = document.getElementById('stallsBottom');
+    topContainer.innerHTML = '';
+    bottomContainer.innerHTML = '';
 
     let occupied = 0;
 
@@ -26,37 +27,44 @@ function render() {
         if (spot.occupiedBy) occupied++;
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
         const div = document.createElement('div');
-        div.className = `spot-marker ${spot.occupiedBy ? 'busy' : 'free'} ${isBlocked ? 'blocked' : ''}`;
-        div.style.left = `${spot.x}%`;
-        div.style.top = `${spot.y}%`;
+        div.className = `stall ${spot.occupiedBy ? 'busy' : 'free'} ${isBlocked ? 'blocked' : ''}`;
 
-        const label = spot.occupiedBy ? spot.occupiedBy.carNumber : `№${spot.id}`;
-        div.innerHTML = `${spot.id}${isBlocked ? '⚠️' : ''}<small>${spot.occupiedBy ? spot.occupiedBy.carNumber : ''}</small>`;
+        const carLabel = spot.occupiedBy ? spot.occupiedBy.carNumber : 'Свободно';
+        div.innerHTML = `
+            <div class="stall-num">№${spot.id} ${isBlocked ? '⚠️' : ''}</div>
+            <div class="stall-car">${spot.occupiedBy ? spot.occupiedBy.carNumber : ''}</div>
+        `;
 
-        div.onclick = (e) => {
-            e.stopPropagation();
-            if (isEditMode) {
-                if (confirm(`Удалить место №${spot.id}?`)) {
-                    parkingData.spots = parkingData.spots.filter(s => s.id !== spot.id);
-                    render();
-                }
-            } else {
-                openSpotDetails(spot);
-            }
-        };
+        div.onclick = () => openSpotDetails(spot);
 
-        // Поддержка перетаскивания в режиме админа
-        if (isEditMode) {
-            makeDraggable(div, spot);
+        if (spot.row === 'top' || spot.id <= (parkingData.config ? parkingData.config.topCount : 16)) {
+            topContainer.appendChild(div);
+        } else {
+            bottomContainer.appendChild(div);
         }
-
-        layer.appendChild(div);
     });
 
     document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
     document.getElementById('statBlocked').innerText = blockers.length;
 
-    // Список 2 ряда
+    // Машины в проезде
+    const drivewayChips = document.getElementById('drivewayChips');
+    const drivewayEmpty = document.getElementById('drivewayEmpty');
+    drivewayChips.innerHTML = '';
+
+    if (blockers.length === 0) {
+        drivewayEmpty.style.display = 'block';
+    } else {
+        drivewayEmpty.style.display = 'none';
+        blockers.forEach(b => {
+            const chip = document.createElement('div');
+            chip.className = 'blocker-car-chip';
+            chip.innerHTML = `🚗 ${b.carNumber} ➔ перекрыл №${(b.blockedSpots || []).join(', ')}`;
+            drivewayChips.appendChild(chip);
+        });
+    }
+
+    // Список 2 ряда внизу
     const bList = document.getElementById('blockersList');
     if (blockers.length === 0) {
         bList.innerHTML = '<p style="color:#666; font-size:14px;">Второй ряд свободен</p>';
@@ -75,75 +83,6 @@ function render() {
     }
 }
 
-// Клик по фото в режиме редактирования - ставит новое место
-function handleMapClick(e) {
-    if (!isEditMode) return;
-    const rect = document.getElementById('mapContainer').getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
-
-    const nextId = parkingData.spots.length > 0 ? Math.max(...parkingData.spots.map(s => s.id)) + 1 : 1;
-    parkingData.spots.push({ id: nextId, x, y, occupiedBy: null });
-    render();
-}
-
-function makeDraggable(el, spot) {
-    let isDragging = false;
-    const onMove = (clientX, clientY) => {
-        const rect = document.getElementById('mapContainer').getBoundingClientRect();
-        spot.x = Math.max(2, Math.min(98, Math.round(((clientX - rect.left) / rect.width) * 100)));
-        spot.y = Math.max(2, Math.min(98, Math.round(((clientY - rect.top) / rect.height) * 100)));
-        el.style.left = spot.x + '%';
-        el.style.top = spot.y + '%';
-    };
-
-    el.ontouchstart = (e) => { isDragging = true; };
-    window.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches[0]) onMove(e.touches[0].clientX, e.touches[0].clientY);
-    });
-    window.addEventListener('touchend', () => { isDragging = false; });
-}
-
-function enableEditMode() {
-    isEditMode = true;
-    document.getElementById('editModeNotice').style.display = 'block';
-    render();
-}
-
-function disableEditMode() {
-    isEditMode = false;
-    document.getElementById('editModeNotice').style.display = 'none';
-    loadData();
-}
-
-async function saveSpotLayout() {
-    await fetch('/api/admin/spots/layout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: adminPin, spots: parkingData.spots })
-    });
-    alert('Схема мест сохранена!');
-    disableEditMode();
-}
-
-// Загрузка фото двора из галереи
-async function uploadYardPhoto(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-        await fetch('/api/admin/upload-yard', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pin: adminPin, image: reader.result })
-        });
-        document.getElementById('yardImg').src = '/yard.jpg?t=' + Date.now();
-        alert('Фото двора успешно обновлено!');
-    };
-    reader.readAsDataURL(file);
-}
-
-// Модалка места
 function openSpotDetails(spot) {
     const modal = document.getElementById('modalRow1');
     const title = document.getElementById('row1ModalTitle');
@@ -153,10 +92,10 @@ function openSpotDetails(spot) {
     const blocker = (parkingData.blockers || []).find(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
     let blockerHtml = blocker ? `
         <div style="background:#b71c1c; padding:10px; border-radius:6px; margin-bottom:12px;">
-            ⚠️ <b>ВАС ПОДПЕРЛИ!</b><br>
+            ⚠️ <b>ВАС ПОДПЕРЛИ В ПРОЕЗДЕ!</b><br>
             Авто: <b>${blocker.carNumber}</b> (до ${blocker.leaveTime})<br>
             <div style="margin-top:6px;">
-                <a href="tel:${blocker.phone}" class="action-btn" style="background:#4CAF50; color:#fff;">📞 Позвонить</a>
+                <a href="tel:${blocker.phone}" class="action-btn" style="background:#4CAF50; color:#fff;">📞 Набрать</a>
                 <a href="sms:${blocker.phone}?body=${encodeURIComponent('Здравствуйте! Вы перекрыли мою машину на месте №' + spot.id + '. Пожалуйста, выпустите!')}" class="action-btn" style="background:#00bcd4; color:#000;">✉️ Отправить SMS</a>
             </div>
         </div>
@@ -321,7 +260,6 @@ async function toggleAdmin() {
         document.getElementById('roleBadge').innerText = 'Режим: Житель';
         document.getElementById('roleBadge').style.background = '#333';
         document.getElementById('adminPanel').style.display = 'none';
-        disableEditMode();
         return;
     }
     const pin = prompt('Введите PIN-код:');
@@ -338,10 +276,26 @@ async function toggleAdmin() {
         document.getElementById('roleBadge').innerText = '★ Админ';
         document.getElementById('roleBadge').style.background = '#4CAF50';
         document.getElementById('adminPanel').style.display = 'block';
+        if (parkingData.config) {
+            document.getElementById('cfgTop').value = parkingData.config.topCount;
+            document.getElementById('cfgBottom').value = parkingData.config.bottomCount;
+        }
         render();
     } else {
         alert('Неверный PIN!');
     }
+}
+
+async function saveRowConfig() {
+    const topCount = document.getElementById('cfgTop').value;
+    const bottomCount = document.getElementById('cfgBottom').value;
+    await fetch('/api/admin/config-rows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: adminPin, topCount, bottomCount })
+    });
+    alert('Схема рядов обновлена!');
+    loadData();
 }
 
 async function viewSurveyResults() {
