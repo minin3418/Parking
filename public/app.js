@@ -1,51 +1,9 @@
-let parkingData = { spots: [], blockers: [] };
+let parkingData = { spots: [], blockers: [], landmarks: [] };
 let isAdmin = false;
 let adminPin = "";
 let isRow2Mode = false;
+let isEditMode = false;
 let r2Selected = [];
-
-const YARD_SPOTS = [
-    // ВЕРХНИЙ РЯД У ПЛОЩАДКИ (1-14)
-    ...Array.from({ length: 14 }, (_, i) => ({
-        id: i + 1,
-        x: 90 + i * 58,
-        y: 85,
-        w: 42,
-        h: 68,
-        angle: -18,
-        area: 'Верхний ряд (у площадки)'
-    })),
-    // ЛЕВЫЙ КАРМАН СНИЗУ (15-20)
-    ...Array.from({ length: 6 }, (_, i) => ({
-        id: i + 15,
-        x: 75 + i * 44,
-        y: 285,
-        w: 38,
-        h: 70,
-        angle: 0,
-        area: 'Левый карман (у 1 подъезда)'
-    })),
-    // ЦЕНТРАЛЬНЫЙ КАРМАН СНИЗУ (21-24)
-    ...Array.from({ length: 4 }, (_, i) => ({
-        id: i + 21,
-        x: 355 + i * 44,
-        y: 285,
-        w: 38,
-        h: 70,
-        angle: 0,
-        area: 'Центральный карман'
-    })),
-    // ПРАВЫЙ КАРМАН У ПОВОРОТА (25-31)
-    ...Array.from({ length: 7 }, (_, i) => ({
-        id: i + 25,
-        x: 555 + i * 54,
-        y: 295 - i * 9,
-        w: 40,
-        h: 70,
-        angle: 22,
-        area: 'Карман у поворота'
-    }))
-];
 
 async function loadData() {
     try {
@@ -57,34 +15,144 @@ async function loadData() {
     }
 }
 
+// ОТРИСОВКА РЕАЛИСТИЧНОЙ МАШИНКИ (ВИД СВЕРХУ)
+function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+    if (isFree) {
+        // Свободное место: разметочный карман + силуэт
+        const stall = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        stall.setAttribute('x', -18);
+        stall.setAttribute('y', -32);
+        stall.setAttribute('width', 36);
+        stall.setAttribute('height', 64);
+        stall.setAttribute('rx', 6);
+        stall.setAttribute('fill', 'rgba(46, 125, 50, 0.25)');
+        stall.setAttribute('stroke', isSelected ? '#ffeb3b' : (isBlocked ? '#ff9800' : '#4caf50'));
+        stall.setAttribute('stroke-width', isSelected ? '3' : '1.8');
+        if (isBlocked && !isSelected) stall.setAttribute('stroke-dasharray', '4,3');
+        g.appendChild(stall);
+
+        // Номер места
+        const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textNum.setAttribute('y', 4);
+        textNum.setAttribute('fill', '#81c784');
+        textNum.setAttribute('font-size', '13');
+        textNum.setAttribute('font-weight', 'bold');
+        textNum.setAttribute('text-anchor', 'middle');
+        textNum.setAttribute('dominant-baseline', 'middle');
+        textNum.textContent = `№${spotId}${isBlocked ? '⚠️' : ''}${isSelected ? ' ✅' : ''}`;
+        g.appendChild(textNum);
+
+    } else {
+        // Занятое место: КРАСИВАЯ МАШИНКА ВИД СВЕРХУ
+        // Кузов
+        const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        body.setAttribute('x', -16);
+        body.setAttribute('y', -30);
+        body.setAttribute('width', 32);
+        body.setAttribute('height', 60);
+        body.setAttribute('rx', 7);
+        body.setAttribute('fill', isSelected ? '#e65100' : '#c62828');
+        body.setAttribute('stroke', isSelected ? '#ffeb3b' : (isBlocked ? '#ffeb3b' : '#ff7961'));
+        body.setAttribute('stroke-width', isSelected ? '3' : (isBlocked ? '2.5' : '1.5'));
+        if (isBlocked && !isSelected) body.setAttribute('stroke-dasharray', '4,3');
+        g.appendChild(body);
+
+        // Зеркала
+        const m1 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        m1.setAttribute('x', -19); m1.setAttribute('y', -18); m1.setAttribute('width', 3); m1.setAttribute('height', 6); m1.setAttribute('fill', '#888');
+        const m2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        m2.setAttribute('x', 16); m2.setAttribute('y', -18); m2.setAttribute('width', 3); m2.setAttribute('height', 6); m2.setAttribute('fill', '#888');
+        g.appendChild(m1); g.appendChild(m2);
+
+        // Лобовое стекло
+        const frontGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        frontGlass.setAttribute('d', 'M -11 -12 L -9 -21 Q 0 -23 9 -21 L 11 -12 Z');
+        frontGlass.setAttribute('fill', '#111');
+        frontGlass.setAttribute('opacity', '0.8');
+        g.appendChild(frontGlass);
+
+        // Заднее стекло
+        const rearGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        rearGlass.setAttribute('d', 'M -11 15 L -9 22 Q 0 23 9 22 L 11 15 Z');
+        rearGlass.setAttribute('fill', '#111');
+        rearGlass.setAttribute('opacity', '0.8');
+        g.appendChild(rearGlass);
+
+        // Фары
+        const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        l1.setAttribute('cx', -10); l1.setAttribute('cy', -28); l1.setAttribute('r', 2); l1.setAttribute('fill', '#fff9c4');
+        const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        l2.setAttribute('cx', 10); l2.setAttribute('cy', -28); l2.setAttribute('r', 2); l2.setAttribute('fill', '#fff9c4');
+        g.appendChild(l1); g.appendChild(l2);
+
+        // Номер машины на крыше
+        const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textCar.setAttribute('y', 2);
+        textCar.setAttribute('fill', '#ffffff');
+        textCar.setAttribute('font-size', '8');
+        textCar.setAttribute('font-weight', 'bold');
+        textCar.setAttribute('text-anchor', 'middle');
+        textCar.setAttribute('dominant-baseline', 'middle');
+        textCar.textContent = carNumber || `№${spotId}`;
+        g.appendChild(textCar);
+    }
+
+    return g;
+}
+
 function render() {
     const spots = parkingData.spots || [];
     const blockers = parkingData.blockers || [];
+    const landmarks = parkingData.landmarks || [];
     const slotsLayer = document.getElementById('slotsLayer');
     const blockersLayer = document.getElementById('blockersLayer');
+    const landmarksLayer = document.getElementById('landmarksLayer');
+    
     slotsLayer.innerHTML = '';
     blockersLayer.innerHTML = '';
+    landmarksLayer.innerHTML = '';
 
     let occupied = 0;
 
-    YARD_SPOTS.forEach(def => {
-        const spot = spots.find(s => s.id === def.id) || { id: def.id, occupiedBy: null };
+    // Отрисовка надписей и ориентиров двора
+    landmarks.forEach(lm => {
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', lm.x);
+        text.setAttribute('y', lm.y);
+        text.setAttribute('fill', '#aaa');
+        text.setAttribute('font-size', '11');
+        text.setAttribute('font-weight', 'bold');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('class', `landmark-text ${isEditMode ? 'editable-landmark' : ''}`);
+        text.textContent = lm.text;
+        
+        if (isEditMode) {
+            text.onclick = () => {
+                const newText = prompt(`Изменить надпись "${lm.text}":`, lm.text);
+                if (newText && newText.trim()) {
+                    lm.text = newText.trim();
+                    render();
+                }
+            };
+        }
+        landmarksLayer.appendChild(text);
+    });
+
+    // Отрисовка 31 машинки
+    spots.forEach(spot => {
         if (spot.occupiedBy) occupied++;
 
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
-        const isSelectedByMe = r2Selected.includes(spot.id);
-
-        const statusClass = spot.occupiedBy ? 'busy' : 'free';
-        const blockedClass = isBlocked ? 'blocked' : '';
-        const selectedClass = isSelectedByMe ? 'selected' : '';
+        const isSelected = r2Selected.includes(spot.id);
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `stall-node ${statusClass} ${blockedClass} ${selectedClass}`);
-        g.setAttribute('transform', `translate(${def.x}, ${def.y}) rotate(${def.angle})`);
+        g.setAttribute('class', 'stall-node');
+        g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${spot.angle || 0})`);
 
         g.onclick = () => {
             if (isRow2Mode) {
-                // ИНТЕРАКТИВНЫЙ ВЫБОР ПАЛЬЦЕМ НА КАРТЕ
                 if (r2Selected.includes(spot.id)) {
                     r2Selected = r2Selected.filter(id => id !== spot.id);
                 } else {
@@ -93,66 +161,31 @@ function render() {
                 updateRow2SheetText();
                 render();
             } else {
-                openSpotDetails(spot, def.area);
+                openSpotDetails(spot);
             }
         };
 
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', -def.w / 2);
-        rect.setAttribute('y', -def.h / 2);
-        rect.setAttribute('width', def.w);
-        rect.setAttribute('height', def.h);
-        g.appendChild(rect);
-
-        const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textNum.setAttribute('y', -16);
-        textNum.setAttribute('class', 'stall-text');
-        textNum.textContent = `№${def.id}${isSelectedByMe ? ' ✅' : (isBlocked ? '⚠️' : '')}`;
-        g.appendChild(textNum);
-
-        if (spot.occupiedBy) {
-            const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            textCar.setAttribute('y', 14);
-            textCar.setAttribute('class', 'stall-car-text');
-            textCar.textContent = spot.occupiedBy.carNumber;
-            g.appendChild(textCar);
-        }
-
+        const carSvg = createCarSvg(!spot.occupiedBy, spot.occupiedBy ? spot.occupiedBy.carNumber : '', spot.id, isBlocked, isSelected);
+        g.appendChild(carSvg);
         slotsLayer.appendChild(g);
     });
 
     document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
     document.getElementById('statBlocked').innerText = blockers.length;
 
-    // Машины 2-го ряда в проезде
+    // Отрисовка подпирающих во 2-м ряду в проезде
     blockers.forEach(b => {
-        const targetDefs = YARD_SPOTS.filter(s => b.blockedSpots && b.blockedSpots.includes(s.id));
+        const targetDefs = spots.filter(s => b.blockedSpots && b.blockedSpots.includes(s.id));
         if (targetDefs.length > 0) {
             const avgX = targetDefs.reduce((acc, cur) => acc + cur.x, 0) / targetDefs.length;
             const avgY = 195;
 
             const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            bg.setAttribute('transform', `translate(${avgX}, ${avgY})`);
+            bg.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
             bg.onclick = () => requestLeaveRow2(b.id);
 
-            const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            r.setAttribute('x', -35);
-            r.setAttribute('y', -13);
-            r.setAttribute('width', 70);
-            r.setAttribute('height', 26);
-            r.setAttribute('rx', 6);
-            r.setAttribute('fill', '#e65100');
-            r.setAttribute('stroke', '#ffeb3b');
-            r.setAttribute('stroke-width', 2);
-            r.setAttribute('filter', 'drop-shadow(0 2px 5px rgba(0,0,0,0.8))');
-            bg.appendChild(r);
-
-            const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            t.setAttribute('class', 'stall-text');
-            t.setAttribute('font-size', '9');
-            t.textContent = `🚗 ${b.carNumber}`;
-            bg.appendChild(t);
-
+            const carSvg = createCarSvg(false, b.carNumber, '', false, false);
+            bg.appendChild(carSvg);
             blockersLayer.appendChild(bg);
         }
     });
@@ -176,7 +209,27 @@ function render() {
     }
 }
 
-// РЕЖИМ ПОДПИРАНИЯ
+// РЕЖИМ РЕДАКТОРА СХЕМЫ И НАДПИСЕЙ
+function toggleMapEdit() {
+    isEditMode = !isEditMode;
+    document.getElementById('btnSaveMap').style.display = isEditMode ? 'block' : 'none';
+    document.getElementById('editHint').style.display = isEditMode ? 'block' : 'none';
+    document.getElementById('btnMapEdit').innerText = isEditMode ? 'Отмена' : '🛠 Редактировать схему';
+    render();
+}
+
+async function saveMapConfig() {
+    await fetch('/api/admin/map-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: adminPin, landmarks: parkingData.landmarks, spots: parkingData.spots })
+    });
+    alert('Схема и надписи сохранены!');
+    toggleMapEdit();
+    loadData();
+}
+
+// 2-й ряд: выбор на карте
 function startRow2Selection() {
     isRow2Mode = true;
     r2Selected = [];
@@ -203,7 +256,7 @@ function cancelRow2Selection() {
 
     const inst = document.getElementById('instructionText');
     inst.className = 'instruction-bar';
-    inst.innerHTML = '👉 Листайте карту двора влево-вправо ⇄ Нажмите на свободное место, чтобы занять.';
+    inst.innerHTML = '👉 Листайте схему влево-вправо ⇄ Нажмите на машинку, чтобы занять.';
 
     render();
 }
@@ -236,11 +289,11 @@ async function submitRow2() {
     loadData();
 }
 
-function openSpotDetails(spot, areaName) {
+function openSpotDetails(spot) {
     const modal = document.getElementById('modalRow1');
     const title = document.getElementById('row1ModalTitle');
     const actions = document.getElementById('spotActions');
-    title.innerText = `Место №${spot.id} (${areaName || 'Двор'})`;
+    title.innerText = `Место №${spot.id}`;
 
     const blocker = (parkingData.blockers || []).find(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
     let blockerHtml = blocker ? `
@@ -367,6 +420,8 @@ async function toggleAdmin() {
         document.getElementById('roleBadge').innerText = 'Режим: Житель';
         document.getElementById('roleBadge').style.background = '#333';
         document.getElementById('adminPanel').style.display = 'none';
+        isEditMode = false;
+        render();
         return;
     }
     const pin = prompt('Введите PIN-код:');

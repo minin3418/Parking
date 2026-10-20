@@ -7,22 +7,43 @@ const IP = process.env.IP || '::';
 const DB_FILE = './database.json';
 const ADMIN_PIN = process.env.ADMIN_PIN || "3418";
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
+// Базовые 31 место и ориентиры по вашему двору
+function getInitialData() {
+    const spots = [
+        // Верхний ряд (1-14)
+        ...Array.from({ length: 14 }, (_, i) => ({ id: i + 1, x: 90 + i * 58, y: 90, angle: -18, occupiedBy: null })),
+        // Левый карман (15-20)
+        ...Array.from({ length: 6 }, (_, i) => ({ id: i + 15, x: 75 + i * 44, y: 285, angle: 0, occupiedBy: null })),
+        // Центральный карман (21-24)
+        ...Array.from({ length: 4 }, (_, i) => ({ id: i + 21, x: 355 + i * 44, y: 285, angle: 0, occupiedBy: null })),
+        // Карман у поворота (25-31)
+        ...Array.from({ length: 7 }, (_, i) => ({ id: i + 25, x: 555 + i * 54, y: 295 - i * 9, angle: 22, occupiedBy: null }))
+    ];
+
+    const landmarks = [
+        { id: 'lm1', text: 'ПОДЪЕЗД С АРКОЙ', x: 60, y: 22 },
+        { id: 'lm2', text: '🛝 ДЕТСКАЯ ПЛОЩАДКА', x: 470, y: 36 },
+        { id: 'lm3', text: '🏢 1-Й ПОДЪЕЗД', x: 140, y: 425 },
+        { id: 'lm4', text: '🌱 КЛУМБА', x: 500, y: 415 },
+        { id: 'lm5', text: '↩️ ПОВОРОТ', x: 820, y: 425 }
+    ];
+
+    return { spots, landmarks, blockers: [], surveys: [] };
+}
+
 function getData() { 
-    let data = { spots: [], blockers: [], surveys: [] };
+    let data;
     if (fs.existsSync(DB_FILE)) {
         try { data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')); } catch(e){}
     }
-    // Гарантируем ровно 31 место под реальный двор
-    if (!data.spots || data.spots.length !== 31) {
-        const oldSpots = data.spots || [];
-        data.spots = Array.from({ length: 31 }, (_, i) => {
-            const old = oldSpots.find(s => s.id === i + 1);
-            return old || { id: i + 1, occupiedBy: null };
-        });
+    if (!data || !data.spots || data.spots.length !== 31) {
+        data = getInitialData();
+        saveData(data);
     }
+    if (!data.landmarks) data.landmarks = getInitialData().landmarks;
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
     return data;
@@ -35,6 +56,16 @@ app.get('/api/parking', (req, res) => res.json(getData()));
 
 app.post('/api/admin/login', (req, res) => {
     res.json({ success: req.body.pin === ADMIN_PIN });
+});
+
+// АДМИН: Сохранение схемы (координаты, углы, названия)
+app.post('/api/admin/map-config', (req, res) => {
+    if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
+    const data = getData();
+    if (req.body.spots) data.spots = req.body.spots;
+    if (req.body.landmarks) data.landmarks = req.body.landmarks;
+    saveData(data);
+    res.json({ success: true });
 });
 
 app.post('/api/park/row1', (req, res) => {
