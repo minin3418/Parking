@@ -1,17 +1,8 @@
 let parkingData = { spots: [], blockers: [] };
 let isAdmin = false;
 let adminPin = "";
+let isEditMode = false;
 let r2Selected = [];
-
-function formatTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (diffMin < 60) return `${h}:${m} (${diffMin} мин назад)`;
-    return `${h}:${m} (~${Math.floor(diffMin / 60)} ч назад)`;
-}
 
 async function loadData() {
     try {
@@ -19,34 +10,53 @@ async function loadData() {
         parkingData = await res.json();
         render();
     } catch(e) {
-        console.error("Ошибка сети", e);
+        console.error("Ошибка загрузки данных", e);
     }
 }
 
 function render() {
     const spots = parkingData.spots || [];
     const blockers = parkingData.blockers || [];
-    const row1El = document.getElementById('row1');
-    row1El.innerHTML = '';
+    const layer = document.getElementById('markersLayer');
+    layer.innerHTML = '';
+
     let occupied = 0;
 
     spots.forEach(spot => {
         if (spot.occupiedBy) occupied++;
-        const div = document.createElement('div');
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
+        const div = document.createElement('div');
+        div.className = `spot-marker ${spot.occupiedBy ? 'busy' : 'free'} ${isBlocked ? 'blocked' : ''}`;
+        div.style.left = `${spot.x}%`;
+        div.style.top = `${spot.y}%`;
 
-        div.className = `spot ${spot.occupiedBy ? 'busy' : ''}`;
-        if (isBlocked) div.style.border = '2px dashed #ff9800';
+        const label = spot.occupiedBy ? spot.occupiedBy.carNumber : `№${spot.id}`;
+        div.innerHTML = `${spot.id}${isBlocked ? '⚠️' : ''}<small>${spot.occupiedBy ? spot.occupiedBy.carNumber : ''}</small>`;
 
-        const label = spot.occupiedBy ? spot.occupiedBy.carNumber : 'Свободно';
-        div.innerHTML = `<b>${spot.id} ${isBlocked ? '⚠️' : ''}</b><small>${label}</small>`;
-        div.onclick = () => openSpotDetails(spot);
-        row1El.appendChild(div);
+        div.onclick = (e) => {
+            e.stopPropagation();
+            if (isEditMode) {
+                if (confirm(`Удалить место №${spot.id}?`)) {
+                    parkingData.spots = parkingData.spots.filter(s => s.id !== spot.id);
+                    render();
+                }
+            } else {
+                openSpotDetails(spot);
+            }
+        };
+
+        // Поддержка перетаскивания в режиме админа
+        if (isEditMode) {
+            makeDraggable(div, spot);
+        }
+
+        layer.appendChild(div);
     });
 
-    document.getElementById('statOccupied').innerText = `${occupied} / ${spots.length}`;
+    document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
     document.getElementById('statBlocked').innerText = blockers.length;
 
+    // Список 2 ряда
     const bList = document.getElementById('blockersList');
     if (blockers.length === 0) {
         bList.innerHTML = '<p style="color:#666; font-size:14px;">Второй ряд свободен</p>';
@@ -55,16 +65,85 @@ function render() {
             <div class="block-card">
                 <b>🚗 ${b.carNumber}</b> (до ~${b.leaveTime || '?'})<br>
                 Подпёр места: <b>${(b.blockedSpots || []).join(', ')}</b><br>
-                <div style="margin-top:6px;">
+                <div>
                     <a href="tel:${b.phone}" class="action-btn" style="background:#2e7d32; color:#fff;">📞 Набрать</a>
                     <a href="sms:${b.phone}?body=${encodeURIComponent('Здравствуйте! Вы перекрыли выезд во дворе. Пожалуйста, выпустите мою машину.')}" class="action-btn" style="background:#0288d1; color:#fff;">✉️ SMS</a>
                 </div>
-                <button onclick="requestLeaveRow2(${b.id})" style="background:#333; border:1px solid #555; color:#ccc; padding:6px 10px; border-radius:4px; margin-top:8px; font-size:12px; cursor:pointer;">Освободить 2-й ряд</button>
+                <button onclick="requestLeaveRow2(${b.id})" style="background:#333; border:1px solid #555; color:#ccc; padding:6px 10px; border-radius:4px; margin-top:8px; font-size:12px; cursor:pointer;">Освободить проезд</button>
             </div>
         `).join('');
     }
 }
 
+// Клик по фото в режиме редактирования - ставит новое место
+function handleMapClick(e) {
+    if (!isEditMode) return;
+    const rect = document.getElementById('mapContainer').getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+
+    const nextId = parkingData.spots.length > 0 ? Math.max(...parkingData.spots.map(s => s.id)) + 1 : 1;
+    parkingData.spots.push({ id: nextId, x, y, occupiedBy: null });
+    render();
+}
+
+function makeDraggable(el, spot) {
+    let isDragging = false;
+    const onMove = (clientX, clientY) => {
+        const rect = document.getElementById('mapContainer').getBoundingClientRect();
+        spot.x = Math.max(2, Math.min(98, Math.round(((clientX - rect.left) / rect.width) * 100)));
+        spot.y = Math.max(2, Math.min(98, Math.round(((clientY - rect.top) / rect.height) * 100)));
+        el.style.left = spot.x + '%';
+        el.style.top = spot.y + '%';
+    };
+
+    el.ontouchstart = (e) => { isDragging = true; };
+    window.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches[0]) onMove(e.touches[0].clientX, e.touches[0].clientY);
+    });
+    window.addEventListener('touchend', () => { isDragging = false; });
+}
+
+function enableEditMode() {
+    isEditMode = true;
+    document.getElementById('editModeNotice').style.display = 'block';
+    render();
+}
+
+function disableEditMode() {
+    isEditMode = false;
+    document.getElementById('editModeNotice').style.display = 'none';
+    loadData();
+}
+
+async function saveSpotLayout() {
+    await fetch('/api/admin/spots/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: adminPin, spots: parkingData.spots })
+    });
+    alert('Схема мест сохранена!');
+    disableEditMode();
+}
+
+// Загрузка фото двора из галереи
+async function uploadYardPhoto(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+        await fetch('/api/admin/upload-yard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin: adminPin, image: reader.result })
+        });
+        document.getElementById('yardImg').src = '/yard.jpg?t=' + Date.now();
+        alert('Фото двора успешно обновлено!');
+    };
+    reader.readAsDataURL(file);
+}
+
+// Модалка места
 function openSpotDetails(spot) {
     const modal = document.getElementById('modalRow1');
     const title = document.getElementById('row1ModalTitle');
@@ -77,7 +156,7 @@ function openSpotDetails(spot) {
             ⚠️ <b>ВАС ПОДПЕРЛИ!</b><br>
             Авто: <b>${blocker.carNumber}</b> (до ${blocker.leaveTime})<br>
             <div style="margin-top:6px;">
-                <a href="tel:${blocker.phone}" class="action-btn" style="background:#4CAF50; color:#fff;">📞 Набрать</a>
+                <a href="tel:${blocker.phone}" class="action-btn" style="background:#4CAF50; color:#fff;">📞 Позвонить</a>
                 <a href="sms:${blocker.phone}?body=${encodeURIComponent('Здравствуйте! Вы перекрыли мою машину на месте №' + spot.id + '. Пожалуйста, выпустите!')}" class="action-btn" style="background:#00bcd4; color:#000;">✉️ Отправить SMS</a>
             </div>
         </div>
@@ -88,22 +167,17 @@ function openSpotDetails(spot) {
             ${blockerHtml}
             <p style="margin:4px 0;">Занято: <b>${spot.occupiedBy.carNumber}</b></p>
             <p style="margin:4px 0; color:#aaa; font-size:13px;">Кв: ${spot.occupiedBy.apt || '—'} | Тел: ${spot.occupiedBy.phone || '—'}</p>
-            <p style="margin:4px 0 12px 0; color:#777; font-size:12px;">Стоит с: ${formatTime(spot.occupiedBy.parkedAt)}</p>
-            <button onclick="requestLeaveRow1(${spot.id})" style="width:100%; padding:10px; background:#d32f2f; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">
-                ${isAdmin ? '★ Принудительно освободить (Админ)' : 'Освободить место'}
+            <button onclick="requestLeaveRow1(${spot.id})" style="width:100%; padding:10px; background:#d32f2f; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; margin-top:8px;">
+                ${isAdmin ? '★ Освободить (Админ)' : 'Освободить место'}
             </button>
             <button onclick="closeModal('modalRow1')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:8px; cursor:pointer;">Закрыть</button>
         `;
     } else {
-        const savedCar = localStorage.getItem('my_car') || '';
-        const savedPhone = localStorage.getItem('my_phone') || '';
-        const savedApt = localStorage.getItem('my_apt') || '';
-
         actions.innerHTML = `
             ${blockerHtml}
-            <input type="text" id="r1Car" placeholder="Номер авто (А123АА)" value="${savedCar}">
-            <input type="text" id="r1Apt" placeholder="Номер квартиры" value="${savedApt}">
-            <input type="tel" id="r1Phone" placeholder="Телефон для связи" value="${savedPhone}">
+            <input type="text" id="r1Car" placeholder="Номер авто (А123АА)" value="${localStorage.getItem('my_car') || ''}">
+            <input type="text" id="r1Apt" placeholder="Номер квартиры" value="${localStorage.getItem('my_apt') || ''}">
+            <input type="tel" id="r1Phone" placeholder="Телефон для связи" value="${localStorage.getItem('my_phone') || ''}">
             <button onclick="occupyRow1(${spot.id})" style="width:100%; padding:10px; background:#2e7d32; color:#fff; border:none; border-radius:6px; font-weight:bold; margin-top:6px; cursor:pointer;">Занять место</button>
             <button onclick="closeModal('modalRow1')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:8px; cursor:pointer;">Закрыть</button>
         `;
@@ -130,12 +204,9 @@ async function occupyRow1(spotId) {
     loadData();
 }
 
-// Защита от случайного сброса 1-го ряда
 function requestLeaveRow1(spotId) {
     closeModal('modalRow1');
-    if (isAdmin) {
-        return leaveRow1(spotId, '', adminPin);
-    }
+    if (isAdmin) return leaveRow1(spotId, '', adminPin);
     document.getElementById('confirmDigits').value = '';
     document.getElementById('confirmError').style.display = 'none';
     document.getElementById('btnConfirmLeave').onclick = () => {
@@ -166,7 +237,7 @@ async function leaveRow1(spotId, phoneDigits, pin) {
     }
 }
 
-// Открытие модалки 2-го ряда
+// 2-й ряд
 function openRow2Modal() {
     r2Selected = [];
     document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
@@ -197,7 +268,7 @@ async function submitRow2Modal() {
     const phone = document.getElementById('r2Phone').value.trim();
     const leaveTime = document.getElementById('r2Time').value.trim();
     if (!carNumber || !phone) return alert('Укажите номер и телефон!');
-    if (r2Selected.length === 0) return alert('Выберите хотя бы одно перекрытое место (нажмите на номер)!');
+    if (r2Selected.length === 0) return alert('Выберите хотя бы одно перекрытое место!');
 
     localStorage.setItem('my_car', carNumber);
     localStorage.setItem('my_phone', phone);
@@ -212,9 +283,7 @@ async function submitRow2Modal() {
 }
 
 function requestLeaveRow2(blockerId) {
-    if (isAdmin) {
-        return leaveRow2(blockerId, '', adminPin);
-    }
+    if (isAdmin) return leaveRow2(blockerId, '', adminPin);
     document.getElementById('confirmDigits').value = '';
     document.getElementById('confirmError').style.display = 'none';
     document.getElementById('btnConfirmLeave').onclick = () => {
@@ -252,7 +321,7 @@ async function toggleAdmin() {
         document.getElementById('roleBadge').innerText = 'Режим: Житель';
         document.getElementById('roleBadge').style.background = '#333';
         document.getElementById('adminPanel').style.display = 'none';
-        render();
+        disableEditMode();
         return;
     }
     const pin = prompt('Введите PIN-код:');
@@ -272,26 +341,6 @@ async function toggleAdmin() {
         render();
     } else {
         alert('Неверный PIN!');
-    }
-}
-
-async function addSpot() {
-    await fetch('/api/admin/spot/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ pin: adminPin })
-    });
-    loadData();
-}
-
-async function removeSpot() {
-    if (confirm('Удалить последнее место?')) {
-        await fetch('/api/admin/spot/remove', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ pin: adminPin })
-        });
-        loadData();
     }
 }
 
@@ -333,9 +382,7 @@ async function submitSurvey() {
     document.getElementById('surveySuccess').style.display = 'block';
 }
 
-function closeModal(id) {
-    document.getElementById(id).style.display = 'none';
-}
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 if (localStorage.getItem('parking_voted')) {
     document.getElementById('surveyForm').style.display = 'none';

@@ -2,57 +2,84 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Двор: Парковка</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #121212; color: #fff; margin: 0; padding: 15px; padding-bottom: 100px; }
+        body { font-family: -apple-system, sans-serif; background: #121212; color: #fff; margin: 0; padding: 12px; padding-bottom: 110px; }
         header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .admin-badge { background: #333; border: 1px solid #666; color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
-        .stats-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-        .stat-card { background: #1e1e1e; padding: 10px; border-radius: 8px; text-align: center; }
-        .stat-card b { display: block; font-size: 20px; margin-top: 4px; color: #4CAF50; }
-        .instruction { background: #263238; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; border-left: 4px solid #00bcd4; }
-        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; }
-        .spot { background: #2e7d32; padding: 12px 2px; border-radius: 8px; text-align: center; cursor: pointer; border: 3px solid transparent; min-height: 50px; }
-        .spot.busy { background: #c62828; }
-        .spot small { display: block; font-size: 11px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .btn-main { width: 100%; padding: 14px; background: #1976d2; border: none; color: white; border-radius: 8px; font-weight: bold; font-size: 16px; margin-bottom: 15px; cursor: pointer; }
-        .admin-controls { display: none; background: #222; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 2px dashed #e91e63; }
-        .survey-card { background: #1e1e1e; border: 1px solid #333; padding: 14px; border-radius: 8px; margin-bottom: 15px; }
+        .stats-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .stat-card { background: #1e1e1e; padding: 8px; border-radius: 8px; text-align: center; font-size: 13px; }
+        .stat-card b { display: block; font-size: 18px; margin-top: 2px; color: #4CAF50; }
+        
+        /* ИНТЕРАКТИВНАЯ КАРТА ДВОРА */
+        .map-wrapper { position: relative; width: 100%; overflow: hidden; border-radius: 10px; border: 2px solid #333; background: #1a1a1a; margin-bottom: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .map-container { position: relative; width: 100%; display: block; user-select: none; }
+        .yard-img { width: 100%; height: auto; display: block; min-height: 220px; object-fit: cover; }
+
+        /* МАРКЕРЫ МЕСТ НА АСФАЛЬТЕ */
+        .spot-marker { position: absolute; transform: translate(-50%, -50%); padding: 3px 6px; border-radius: 12px; font-size: 11px; font-weight: bold; cursor: pointer; border: 1.5px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.8); z-index: 10; white-space: nowrap; transition: transform 0.15s; }
+        .spot-marker:active { transform: translate(-50%, -50%) scale(1.2); }
+        .spot-marker.free { background: rgba(46, 125, 50, 0.95); color: #fff; }
+        .spot-marker.busy { background: rgba(198, 40, 40, 0.95); color: #fff; }
+        .spot-marker.blocked { border: 2px dashed #ffeb3b; box-shadow: 0 0 10px #ff9800; }
+        .spot-marker small { display: block; font-size: 9px; opacity: 0.9; }
+
+        .btn-main { width: 100%; padding: 14px; background: #1976d2; border: none; color: white; border-radius: 8px; font-weight: bold; font-size: 15px; margin-bottom: 12px; cursor: pointer; }
+        .admin-controls { display: none; background: #222; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 2px dashed #e91e63; }
+        
+        .survey-card { background: #1e1e1e; border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
         .survey-card h4 { margin: 0 0 6px 0; color: #ffeb3b; }
         .survey-option { display: flex; align-items: center; margin-bottom: 8px; font-size: 14px; cursor: pointer; }
-        .survey-option input { width: 20px; height: 20px; margin-right: 10px; }
+        .survey-option input { width: 18px; height: 18px; margin-right: 8px; }
         input[type="text"], input[type="tel"] { width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #444; background: #333; color: white; box-sizing: border-box; font-size: 15px; }
+
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 200; }
-        .modal-content { background: #222; padding: 20px; border-radius: 12px; width: 85%; max-width: 340px; }
-        .block-card { background: #1e1e1e; border-left: 4px solid #ff9800; padding: 12px; margin-bottom: 10px; border-radius: 4px; }
-        .action-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px; margin-top: 6px; margin-right: 6px; }
-        .spot-badge { display: inline-block; padding: 6px 12px; background: #333; border: 1px solid #555; border-radius: 4px; margin: 4px; cursor: pointer; font-size: 14px; }
-        .spot-badge.active { background: #ff9800; color: #000; font-weight: bold; border-color: #ff9800; }
+        .modal-content { background: #222; padding: 18px; border-radius: 12px; width: 85%; max-width: 340px; }
+        .block-card { background: #1e1e1e; border-left: 4px solid #ff9800; padding: 10px; margin-bottom: 8px; border-radius: 4px; }
+        .action-btn { display: inline-flex; align-items: center; justify-content: center; padding: 7px 11px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 12px; margin-top: 6px; margin-right: 6px; }
+        .spot-badge { display: inline-block; padding: 5px 10px; background: #333; border: 1px solid #555; border-radius: 4px; margin: 3px; cursor: pointer; font-size: 13px; }
+        .spot-badge.active { background: #ff9800; color: #000; font-weight: bold; }
     </style>
 </head>
 <body>
     <header>
-        <h2 style="margin:0;">Двор: Парковка</h2>
+        <h2 style="margin:0; font-size:20px;">Двор: Парковка</h2>
         <button id="roleBadge" class="admin-badge" onclick="toggleAdmin()">Режим: Житель</button>
     </header>
 
+    <!-- ПАНЕЛЬ АДМИНА: Управление схемой -->
     <div id="adminPanel" class="admin-controls">
         <b style="color: #e91e63;">★ Панель Администратора</b>
-        <div style="display:flex; gap:10px; margin-top:8px;">
-            <button onclick="addSpot()" style="flex:1; padding:8px; background:#4CAF50; color:#fff; border:none; border-radius:4px; font-weight:bold;">+ Место</button>
-            <button onclick="removeSpot()" style="flex:1; padding:8px; background:#f44336; color:#fff; border:none; border-radius:4px; font-weight:bold;">- Место</button>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+            <button onclick="enableEditMode()" id="btnEditMode" style="flex:1; padding:8px; background:#4CAF50; color:#fff; border:none; border-radius:4px; font-weight:bold;">🛠 Режим расстановки</button>
+            <label style="flex:1; padding:8px; background:#0288d1; color:#fff; border-radius:4px; font-weight:bold; text-align:center; cursor:pointer;">
+                📷 Сменить фото
+                <input type="file" id="photoInput" accept="image/*" style="display:none;" onchange="uploadYardPhoto(event)">
+            </label>
         </div>
-        <button onclick="viewSurveyResults()" style="width:100%; margin-top:8px; padding:8px; background:#00bcd4; color:#000; font-weight:bold; border:none; border-radius:4px;">📊 Ответы жильцов на опрос</button>
+        <div id="editModeNotice" style="display:none; color:#ffeb3b; font-size:12px; margin-top:8px;">
+            👉 <b>Нажимайте на машины на фото</b>, чтобы ставить новые места. Перетаскивайте их пальцем!
+            <div style="display:flex; gap:8px; margin-top:6px;">
+                <button onclick="saveSpotLayout()" style="flex:1; padding:6px; background:#4CAF50; color:#fff; border:none; border-radius:4px; font-weight:bold;">💾 Сохранить</button>
+                <button onclick="disableEditMode()" style="flex:1; padding:6px; background:#555; color:#fff; border:none; border-radius:4px;">Отмена</button>
+            </div>
+        </div>
+        <button onclick="viewSurveyResults()" style="width:100%; margin-top:8px; padding:8px; background:#00bcd4; color:#000; font-weight:bold; border:none; border-radius:4px;">📊 Ответы на опрос</button>
     </div>
 
     <div class="stats-bar">
-        <div class="stat-card">Занято мест: <b id="statOccupied">...</b></div>
+        <div class="stat-card">Свободно мест: <b id="statFree">...</b></div>
         <div class="stat-card">Подперли: <b id="statBlocked" style="color:#ff9800;">...</b></div>
     </div>
 
-    <div id="statusInstruction" class="instruction">Нажмите на свободное место, чтобы занять его.</div>
-    <div class="grid" id="row1"></div>
+    <!-- ИНТЕРАКТИВНОЕ ФОТО ДВОРА -->
+    <div class="map-wrapper" id="mapWrapper">
+        <div class="map-container" id="mapContainer" onclick="handleMapClick(event)">
+            <img src="/yard.jpg" id="yardImg" class="yard-img" onerror="this.src='https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1200&q=80'">
+            <div id="markersLayer"></div>
+        </div>
+    </div>
 
     <button class="btn-main" onclick="openRow2Modal()">+ Встать во 2-й ряд (Подпереть)</button>
 
@@ -62,45 +89,42 @@
             <label class="survey-option"><input type="radio" name="poll" value="Буду пользоваться"> 👍 Буду пользоваться</label>
             <label class="survey-option"><input type="radio" name="poll" value="Если все будут, то да"> 🤝 Если все будут, то да</label>
             <label class="survey-option"><input type="radio" name="poll" value="Не нужно / Сложно"> 👎 Не нужно / Сложно</label>
-            <input type="text" id="surveyComment" placeholder="Пожелание/предложение (необязательно)">
-            <button onclick="submitSurvey()" style="width:100%; padding:10px; background:#00bcd4; border:none; color:#000; font-weight:bold; border-radius:6px; margin-top:6px; cursor:pointer;">Отправить голос</button>
+            <input type="text" id="surveyComment" placeholder="Пожелание/предложение">
+            <button onclick="submitSurvey()" style="width:100%; padding:10px; background:#00bcd4; border:none; color:#000; font-weight:bold; border-radius:6px; margin-top:6px;">Отправить голос</button>
         </div>
         <div id="surveySuccess" style="display:none; color:#4CAF50; font-weight:bold;">✅ Спасибо! Голос записан.</div>
     </div>
 
-    <h3>Кто подпер (Ряд 2):</h3>
+    <h3>Машины во 2-м ряду:</h3>
     <div id="blockersList"></div>
 
-    <!-- Модалка Места 1-го ряда -->
+    <!-- Модалки -->
     <div id="modalRow1" class="modal"><div class="modal-content"><h3 id="row1ModalTitle" style="margin-top:0;"></h3><div id="spotActions"></div></div></div>
 
-    <!-- Модалка 2-го ряда (без prompt) -->
     <div id="modalRow2" class="modal">
         <div class="modal-content">
             <h3 style="margin-top:0; color:#ff9800;">🚗 Встать во 2-й ряд</h3>
             <input type="text" id="r2Car" placeholder="Номер авто (А123АА)">
             <input type="tel" id="r2Phone" placeholder="Телефон для связи">
-            <input type="text" id="r2Time" placeholder="Во сколько уедете? (напр. 08:30)">
-            <p style="font-size:12px; color:#aaa; margin:8px 0 4px 0;">Нажмите на места 1-го ряда, которые перекрыли:</p>
+            <input type="text" id="r2Time" placeholder="Уеду в... (напр. 08:30 утра)">
+            <p style="font-size:12px; color:#aaa; margin:6px 0 2px 0;">Кого перекрыли (выберите номера мест):</p>
             <div id="r2SpotsChecklist" style="margin-bottom:10px;"></div>
             <button onclick="submitRow2Modal()" style="width:100%; padding:10px; background:#ff9800; color:#000; font-weight:bold; border:none; border-radius:6px; margin-bottom:6px;">Занять 2-й ряд</button>
             <button onclick="closeModal('modalRow2')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px;">Отмена</button>
         </div>
     </div>
 
-    <!-- Модалка подтверждения выезда (Защита от дурака) -->
     <div id="modalConfirmLeave" class="modal">
         <div class="modal-content">
             <h3 style="margin-top:0; color:#f44336;">Освободить место</h3>
-            <p style="font-size:13px; color:#aaa; margin:0 0 10px 0;">Введите последние 4 цифры вашего номера телефона для подтверждения:</p>
-            <input type="tel" id="confirmDigits" placeholder="Последние 4 цифры (напр. 4589)" maxlength="4" style="text-align:center; font-size:18px; letter-spacing:4px;">
+            <p style="font-size:13px; color:#aaa; margin:0 0 10px 0;">Введите последние 4 цифры вашего телефона:</p>
+            <input type="tel" id="confirmDigits" placeholder="4 цифры (напр. 4589)" maxlength="4" style="text-align:center; font-size:18px; letter-spacing:4px;">
             <div id="confirmError" style="color:#f44336; font-size:12px; display:none; margin-bottom:8px;"></div>
-            <button id="btnConfirmLeave" style="width:100%; padding:10px; background:#f44336; color:#fff; font-weight:bold; border:none; border-radius:6px; margin-bottom:6px;">Подтвердить выезд</button>
+            <button id="btnConfirmLeave" style="width:100%; padding:10px; background:#f44336; color:#fff; font-weight:bold; border:none; border-radius:6px; margin-bottom:6px;">Подтвердить</button>
             <button onclick="closeModal('modalConfirmLeave')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px;">Отмена</button>
         </div>
     </div>
 
-    <!-- Модалка ответов опроса админа -->
     <div id="modalSurveys" class="modal"><div class="modal-content" style="max-height:80vh; overflow-y:auto;"><h3 style="color:#00bcd4; margin-top:0;">Ответы соседей</h3><div id="surveyAnswersList"></div><button onclick="closeModal('modalSurveys')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:10px;">Закрыть</button></div></div>
 
     <script src="/app.js"></script>

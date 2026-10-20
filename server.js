@@ -7,7 +7,8 @@ const IP = process.env.IP || '::';
 const DB_FILE = './database.json';
 const ADMIN_PIN = process.env.ADMIN_PIN || "3418";
 
-app.use(express.json());
+// Лимит 20mb для загрузки фото высокого качества
+app.use(express.json({ limit: '20mb' }));
 app.use(express.static('public'));
 
 function getData() { 
@@ -15,8 +16,18 @@ function getData() {
     if (fs.existsSync(DB_FILE)) {
         try { data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')); } catch(e){}
     }
+    // Если точек нет, создаем базовые с координатами
     if (!data.spots || data.spots.length === 0) {
-        data.spots = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, occupiedBy: null }));
+        data.spots = [
+            { id: 1, x: 12, y: 35, occupiedBy: null },
+            { id: 2, x: 18, y: 35, occupiedBy: null },
+            { id: 3, x: 24, y: 35, occupiedBy: null },
+            { id: 4, x: 30, y: 35, occupiedBy: null },
+            { id: 5, x: 12, y: 62, occupiedBy: null },
+            { id: 6, x: 18, y: 62, occupiedBy: null },
+            { id: 7, x: 24, y: 62, occupiedBy: null },
+            { id: 8, x: 30, y: 62, occupiedBy: null }
+        ];
     }
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
@@ -35,22 +46,20 @@ app.post('/api/admin/login', (req, res) => {
     res.json({ success: req.body.pin === ADMIN_PIN });
 });
 
-app.post('/api/admin/spot/add', (req, res) => {
+// АДМИН: Сохранить координаты мест
+app.post('/api/admin/spots/layout', (req, res) => {
     if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
     const data = getData();
-    const newId = data.spots.length > 0 ? Math.max(...data.spots.map(s => s.id)) + 1 : 1;
-    data.spots.push({ id: newId, occupiedBy: null });
+    data.spots = req.body.spots;
     saveData(data);
-    res.json({ success: true, newId });
+    res.json({ success: true });
 });
 
-app.post('/api/admin/spot/remove', (req, res) => {
+// АДМИН: Загрузка фото двора
+app.post('/api/admin/upload-yard', (req, res) => {
     if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
-    const data = getData();
-    if (data.spots.length > 0) {
-        data.spots.pop();
-        saveData(data);
-    }
+    const base64Data = req.body.image.replace(/^data:image\/\w+;base64,/, "");
+    fs.writeFileSync('./public/yard.jpg', Buffer.from(base64Data, 'base64'));
     res.json({ success: true });
 });
 
@@ -88,11 +97,8 @@ app.post('/api/leave/row1', (req, res) => {
 
     const cleanStored = (spot.occupiedBy.phone || '').replace(/\D/g, '');
     const cleanEntered = (phoneDigits || '').replace(/\D/g, '');
-
-    if (cleanStored.length >= 4) {
-        if (!cleanStored.endsWith(cleanEntered)) {
-            return res.status(403).json({ error: 'Неверные последние 4 цифры телефона владельца!' });
-        }
+    if (cleanStored.length >= 4 && !cleanStored.endsWith(cleanEntered)) {
+        return res.status(403).json({ error: 'Неверные 4 цифры телефона!' });
     }
 
     spot.occupiedBy = null;
@@ -130,11 +136,8 @@ app.post('/api/leave/row2', (req, res) => {
 
     const cleanStored = (blocker.phone || '').replace(/\D/g, '');
     const cleanEntered = (phoneDigits || '').replace(/\D/g, '');
-
-    if (cleanStored.length >= 4) {
-        if (!cleanStored.endsWith(cleanEntered)) {
-            return res.status(403).json({ error: 'Неверные последние 4 цифры телефона!' });
-        }
+    if (cleanStored.length >= 4 && !cleanStored.endsWith(cleanEntered)) {
+        return res.status(403).json({ error: 'Неверные 4 цифры телефона!' });
     }
 
     data.blockers = data.blockers.filter(b => b.id !== blockerId);
