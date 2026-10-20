@@ -33,16 +33,13 @@ async function loadData() {
     }
 }
 
-// ОТРИСОВКА РЕАЛИСТИЧНОЙ МАШИНКИ (ВИД СВЕРХУ) + ВРЕМЯ НА КРЫШЕ
 function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAtStr) {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
     if (isFree) {
         const stall = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        stall.setAttribute('x', -18);
-        stall.setAttribute('y', -32);
-        stall.setAttribute('width', 36);
-        stall.setAttribute('height', 64);
+        stall.setAttribute('x', -18); stall.setAttribute('y', -32);
+        stall.setAttribute('width', 36); stall.setAttribute('height', 64);
         stall.setAttribute('rx', 6);
         stall.setAttribute('fill', 'rgba(46, 125, 50, 0.25)');
         stall.setAttribute('stroke', isSelected ? '#ffeb3b' : (isBlocked ? '#ff9800' : '#4caf50'));
@@ -53,19 +50,14 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAt
         const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         textNum.setAttribute('y', 4);
         textNum.setAttribute('fill', '#81c784');
-        textNum.setAttribute('font-size', '13');
-        textNum.setAttribute('font-weight', 'bold');
-        textNum.setAttribute('text-anchor', 'middle');
-        textNum.setAttribute('dominant-baseline', 'middle');
+        textNum.setAttribute('font-size', '13'); textNum.setAttribute('font-weight', 'bold');
+        textNum.setAttribute('text-anchor', 'middle'); textNum.setAttribute('dominant-baseline', 'middle');
         textNum.textContent = `№${spotId}${isBlocked ? '⚠️' : ''}${isSelected ? ' ✅' : ''}`;
         g.appendChild(textNum);
-
     } else {
         const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        body.setAttribute('x', -16);
-        body.setAttribute('y', -30);
-        body.setAttribute('width', 32);
-        body.setAttribute('height', 60);
+        body.setAttribute('x', -16); body.setAttribute('y', -30);
+        body.setAttribute('width', 32); body.setAttribute('height', 60);
         body.setAttribute('rx', 7);
         body.setAttribute('fill', isSelected ? '#e65100' : '#c62828');
         body.setAttribute('stroke', isSelected ? '#ffeb3b' : (isBlocked ? '#ffeb3b' : '#ff7961'));
@@ -81,14 +73,12 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAt
 
         const frontGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         frontGlass.setAttribute('d', 'M -11 -12 L -9 -21 Q 0 -23 9 -21 L 11 -12 Z');
-        frontGlass.setAttribute('fill', '#111');
-        frontGlass.setAttribute('opacity', '0.8');
+        frontGlass.setAttribute('fill', '#111'); frontGlass.setAttribute('opacity', '0.8');
         g.appendChild(frontGlass);
 
         const rearGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         rearGlass.setAttribute('d', 'M -11 15 L -9 22 Q 0 23 9 22 L 11 15 Z');
-        rearGlass.setAttribute('fill', '#111');
-        rearGlass.setAttribute('opacity', '0.8');
+        rearGlass.setAttribute('fill', '#111'); rearGlass.setAttribute('opacity', '0.8');
         g.appendChild(rearGlass);
 
         const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -97,30 +87,22 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAt
         l2.setAttribute('cx', 10); l2.setAttribute('cy', -28); l2.setAttribute('r', 2); l2.setAttribute('fill', '#fff9c4');
         g.appendChild(l1); g.appendChild(l2);
 
-        // Номер машины
         const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textCar.setAttribute('y', -2);
-        textCar.setAttribute('fill', '#ffffff');
-        textCar.setAttribute('font-size', '8');
-        textCar.setAttribute('font-weight', 'bold');
-        textCar.setAttribute('text-anchor', 'middle');
-        textCar.setAttribute('dominant-baseline', 'middle');
+        textCar.setAttribute('y', -2); textCar.setAttribute('fill', '#ffffff');
+        textCar.setAttribute('font-size', '8'); textCar.setAttribute('font-weight', 'bold');
+        textCar.setAttribute('text-anchor', 'middle'); textCar.setAttribute('dominant-baseline', 'middle');
         textCar.textContent = carNumber || `№${spotId}`;
         g.appendChild(textCar);
 
-        // Время парковки на крыше (если есть)
         if (parkedAtStr) {
             const textTime = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            textTime.setAttribute('y', 8);
-            textTime.setAttribute('fill', '#ffeb3b');
-            textTime.setAttribute('font-size', '6');
-            textTime.setAttribute('text-anchor', 'middle');
+            textTime.setAttribute('y', 8); textTime.setAttribute('fill', '#ffeb3b');
+            textTime.setAttribute('font-size', '6'); textTime.setAttribute('text-anchor', 'middle');
             textTime.setAttribute('dominant-baseline', 'middle');
             textTime.textContent = getShortTime(parkedAtStr);
             g.appendChild(textTime);
         }
     }
-
     return g;
 }
 
@@ -149,15 +131,15 @@ function render() {
         text.setAttribute('class', `landmark-text ${isEditMode ? 'editable-landmark' : ''}`);
         text.textContent = lm.text;
         
-        if (isEditMode) {
-            text.onclick = () => {
-                const newText = prompt(`Изменить надпись "${lm.text}":`, lm.text);
-                if (newText && newText.trim()) {
-                    lm.text = newText.trim();
-                    render();
-                }
-            };
-        }
+        // КЛИК ПО НАДПИСИ ДЛЯ ИЗМЕНЕНИЯ ПРЯМО В РЕЖИМЕ АДМИНА
+        text.onclick = () => {
+            if (!isEditMode) return;
+            const newText = prompt(`Изменить надпись "${lm.text}":`, lm.text);
+            if (newText && newText.trim()) {
+                lm.text = newText.trim();
+                render();
+            }
+        };
         landmarksLayer.appendChild(text);
     });
 
@@ -204,8 +186,7 @@ function render() {
             bg.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
             bg.onclick = () => requestLeaveRow2(b.id);
 
-            const carSvg = createCarSvg(false, b.carNumber, '', false, false, Date.now() /* заглушка для вида */);
-            
+            const carSvg = createCarSvg(false, b.carNumber, '', false, false, Date.now());
             bg.appendChild(carSvg);
             blockersLayer.appendChild(bg);
         }
@@ -455,7 +436,7 @@ async function toggleAdmin() {
         isAdmin = true;
         adminPin = pin;
         document.getElementById('roleBadge').innerText = '★ Админ';
-        document.getElementById('roleBadge').style.background = '#4CAF50';
+        document.getElementById('roleBadge`').style.background = '#4CAF50';
         document.getElementById('adminPanel').style.display = 'block';
         render();
     } else {
