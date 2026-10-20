@@ -2,54 +2,46 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Двор: Парковка</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #121212; color: #fff; margin: 0; padding: 12px; padding-bottom: 100px; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        body { font-family: -apple-system, sans-serif; background: #121212; color: #fff; margin: 0; padding: 10px; padding-bottom: 90px; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .admin-badge { background: #333; border: 1px solid #666; color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
-        .stats-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-        .stat-card { background: #1e1e1e; padding: 10px; border-radius: 8px; text-align: center; font-size: 13px; }
-        .stat-card b { display: block; font-size: 20px; margin-top: 2px; color: #4CAF50; }
+        .stats-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .stat-card { background: #1e1e1e; padding: 8px; border-radius: 8px; text-align: center; font-size: 13px; }
+        .stat-card b { display: block; font-size: 18px; margin-top: 2px; color: #4CAF50; }
 
-        /* ВИЗУАЛИЗАЦИЯ ДВОРА */
-        .yard-scroll-hint { font-size: 12px; color: #00bcd4; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-        .yard-board { background: #1a1a1a; border: 2px solid #333; border-radius: 12px; padding: 12px; overflow-x: auto; margin-bottom: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); -webkit-overflow-scrolling: touch; }
-        .yard-inner { min-width: 980px; }
+        .hint-scroll { font-size: 12px; color: #00bcd4; margin-bottom: 6px; font-weight: bold; }
 
-        .landmark-bar { font-size: 12px; font-weight: bold; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; display: inline-block; }
-        .landmark-top { background: #1e3a23; color: #81c784; border-left: 4px solid #4CAF50; }
-        .landmark-bottom { background: #263238; color: #80deea; border-left: 4px solid #00bcd4; margin-top: 10px; margin-bottom: 0; }
+        /* КОНТЕЙНЕР ДВОРОВОЙ КАРТЫ */
+        .yard-map-container { background: #191a1c; border: 2px solid #333; border-radius: 12px; overflow-x: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.6); -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
+        .yard-svg { display: block; min-width: 950px; height: 440px; }
 
-        .stalls-row { display: flex; gap: 8px; }
-        
-        /* ПАРКОВОЧНОЕ МЕСТО (КАРМАН) */
-        .stall { flex: 0 0 54px; height: 80px; border-radius: 6px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 6px 2px; cursor: pointer; border: 2px solid #555; box-sizing: border-box; text-align: center; }
-        .stall.free { background: #1b5e20; border-color: #4caf50; }
-        .stall.busy { background: #b71c1c; border-color: #f44336; }
-        .stall.blocked { border: 2px dashed #ffeb3b; box-shadow: 0 0 10px rgba(255,152,0,0.5); }
-        .stall-num { font-size: 13px; font-weight: bold; }
-        .stall-car { font-size: 10px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50px; }
+        /* ИНТЕРАКТИВНЫЕ МЕСТА */
+        .stall-node { cursor: pointer; transition: transform 0.15s, opacity 0.2s; }
+        .stall-node:hover { opacity: 0.85; }
+        .stall-node rect { stroke-width: 1.5; rx: 4; }
+        .stall-node.free rect { fill: #1b5e20; stroke: #4caf50; }
+        .stall-node.busy rect { fill: #b71c1c; stroke: #f44336; }
+        .stall-node.blocked rect { stroke: #ffeb3b; stroke-width: 2.5; stroke-dasharray: 4,3; filter: drop-shadow(0 0 4px #ff9800); }
+        .stall-text { font-size: 10px; font-weight: bold; fill: #fff; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+        .stall-car-text { font-size: 8px; font-weight: bold; fill: #fff; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
 
-        /* ПРОЕЗД И 2-Й РЯД */
-        .driveway { margin: 12px 0; background: #242424; border-top: 2px dashed #555; border-bottom: 2px dashed #555; padding: 10px 8px; min-height: 48px; border-radius: 4px; display: flex; align-items: center; position: relative; }
-        .driveway-line { font-size: 11px; color: #666; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
-        .blocker-car-chip { display: inline-flex; align-items: center; gap: 6px; background: #e65100; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid #ff9800; margin-right: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
-
+        /* КНОПКИ И МОДАЛКИ */
         .btn-main { width: 100%; padding: 14px; background: #1976d2; border: none; color: white; border-radius: 8px; font-weight: bold; font-size: 15px; margin-bottom: 12px; cursor: pointer; }
         .admin-controls { display: none; background: #222; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 2px dashed #e91e63; }
-        
         .survey-card { background: #1e1e1e; border: 1px solid #333; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
         .survey-card h4 { margin: 0 0 6px 0; color: #ffeb3b; }
         .survey-option { display: flex; align-items: center; margin-bottom: 8px; font-size: 14px; cursor: pointer; }
         .survey-option input { width: 18px; height: 18px; margin-right: 8px; }
-        input[type="text"], input[type="tel"], input[type="number"] { width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #444; background: #333; color: white; box-sizing: border-box; font-size: 15px; }
+        input[type="text"], input[type="tel"] { width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #444; background: #333; color: white; box-sizing: border-box; font-size: 15px; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 200; }
         .modal-content { background: #222; padding: 18px; border-radius: 12px; width: 85%; max-width: 340px; }
         .block-card { background: #1e1e1e; border-left: 4px solid #ff9800; padding: 10px; margin-bottom: 8px; border-radius: 4px; }
         .action-btn { display: inline-flex; align-items: center; justify-content: center; padding: 7px 11px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 12px; margin-top: 6px; margin-right: 6px; }
-        .spot-badge { display: inline-block; padding: 5px 9px; background: #333; border: 1px solid #555; border-radius: 4px; margin: 3px; cursor: pointer; font-size: 12px; }
+        .spot-badge { display: inline-block; padding: 5px 8px; background: #333; border: 1px solid #555; border-radius: 4px; margin: 2px; cursor: pointer; font-size: 12px; }
         .spot-badge.active { background: #ff9800; color: #000; font-weight: bold; }
     </style>
 </head>
@@ -59,45 +51,48 @@
         <button id="roleBadge" class="admin-badge" onclick="toggleAdmin()">Режим: Житель</button>
     </header>
 
-    <!-- ПАНЕЛЬ АДМИНИСТРАТОРА -->
     <div id="adminPanel" class="admin-controls">
         <b style="color: #e91e63;">★ Панель Администратора</b>
-        <div style="font-size:12px; color:#aaa; margin:6px 0;">Настройка рядов двора:</div>
-        <div style="display:flex; gap:8px;">
-            <div style="flex:1;">
-                <label style="font-size:11px;">Верхний ряд:</label>
-                <input type="number" id="cfgTop" value="16">
-            </div>
-            <div style="flex:1;">
-                <label style="font-size:11px;">Нижний ряд:</label>
-                <input type="number" id="cfgBottom" value="14">
-            </div>
-        </div>
-        <button onclick="saveRowConfig()" style="width:100%; padding:8px; background:#4CAF50; color:#fff; border:none; border-radius:4px; font-weight:bold; margin-top:4px;">💾 Применить количество мест</button>
-        <button onclick="viewSurveyResults()" style="width:100%; margin-top:8px; padding:8px; background:#00bcd4; color:#000; font-weight:bold; border:none; border-radius:4px;">📊 Ответы на опрос</button>
+        <button onclick="viewSurveyResults()" style="width:100%; margin-top:8px; padding:8px; background:#00bcd4; color:#000; font-weight:bold; border:none; border-radius:4px;">📊 Ответы жильцов на опрос</button>
     </div>
 
     <div class="stats-bar">
         <div class="stat-card">Свободно мест: <b id="statFree">...</b></div>
-        <div class="stat-card">Подперли: <b id="statBlocked" style="color:#ff9800;">...</b></div>
+        <div class="stat-card">Подперли авто: <b id="statBlocked" style="color:#ff9800;">...</b></div>
     </div>
 
-    <div class="yard-scroll-hint">👉 Листайте схему двора пальцем влево-вправо ⇄</div>
+    <div class="hint-scroll">👉 Листайте карту двора пальцем влево-вправо ⇄</div>
 
-    <!-- ИНТЕРАКТИВНЫЙ ДВОР -->
-    <div class="yard-board">
-        <div class="yard-inner">
-            <div class="landmark-bar landmark-top">🛝 ВЕРХНИЙ РЯД (вдоль детской площадки и забора)</div>
-            <div class="stalls-row" id="stallsTop"></div>
+    <!-- ВЕКТОРНАЯ КАРТА ДВОРА -->
+    <div class="yard-map-container">
+        <svg id="yardSvg" class="yard-svg" viewBox="0 0 960 440" xmlns="http://www.w3.org/2000/svg">
+            <!-- ЗДАНИЕ СВЕРХУ -->
+            <rect x="0" y="0" width="960" height="35" fill="#2d221e" />
+            <rect x="30" y="25" width="60" height="15" fill="#f6e05e" opacity="0.4" />
+            <text x="60" y="20" fill="#aaa" font-size="10" text-anchor="middle">ПОДЪЕЗД С АРКОЙ</text>
 
-            <div class="driveway" id="driveway">
-                <div id="drivewayChips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
-                <span id="drivewayEmpty" class="driveway-line">🚗 Асфальтовый проезд свободен</span>
-            </div>
+            <!-- ДЕТСКАЯ ПЛОЩАДКА -->
+            <rect x="240" y="10" width="460" height="45" rx="6" fill="#1b241b" stroke="#334433" stroke-width="1.5" />
+            <text x="470" y="36" fill="#81c784" font-size="12" font-weight="bold" text-anchor="middle">🛝 ДЕТСКАЯ ПЛОЩАДКА (КРАСНАЯ ГОРКА)</text>
 
-            <div class="stalls-row" id="stallsBottom"></div>
-            <div class="landmark-bar landmark-bottom">🏢 НИЖНИЙ РЯД (вдоль подъездов и газона)</div>
-        </div>
+            <!-- ДОРОЖНЫЙ АСФАЛЬТ И S-ОБРАЗНЫЙ ПРОЕЗД -->
+            <path d="M 0,200 Q 400,230 700,200 T 960,160" fill="none" stroke="#25272a" stroke-width="110" />
+            <path d="M 0,205 Q 400,235 700,205 T 960,165" fill="none" stroke="#444" stroke-width="2" stroke-dasharray="10,10" />
+
+            <!-- ШЕСТИУГОЛЬНАЯ КЛУМБА ПО ЦЕНТРУ ВНИЗУ (КАК НА ФОТО!) -->
+            <polygon points="450,420 475,375 525,375 550,420 525,435 475,435" fill="#1e3a20" stroke="#38761d" stroke-width="2" />
+            <text x="500" y="415" fill="#81c784" font-size="10" text-anchor="middle">🌱 КЛУМБА</text>
+
+            <!-- ОРИЕНТИРЫ НИЖНЕГО РЯДА -->
+            <text x="140" y="425" fill="#666" font-size="11" font-weight="bold">🏢 1-Й ПОДЪЕЗД</text>
+            <text x="820" y="425" fill="#666" font-size="11" font-weight="bold">↩️ ПОВОРОТ</text>
+
+            <!-- СЛОЙ ПАРКОВОЧНЫХ МЕСТ -->
+            <g id="slotsLayer"></g>
+
+            <!-- СЛОЙ ПОДПИРАЮЩИХ МАШИН ВО 2-М РЯДУ -->
+            <g id="blockersLayer"></g>
+        </svg>
     </div>
 
     <button class="btn-main" onclick="openRow2Modal()">+ Встать во 2-й ряд (в проезде)</button>
@@ -117,24 +112,22 @@
     <h3>Машины во 2-м ряду (подпёрли):</h3>
     <div id="blockersList"></div>
 
-    <!-- Модалка места -->
+    <!-- Модалки -->
     <div id="modalRow1" class="modal"><div class="modal-content"><h3 id="row1ModalTitle" style="margin-top:0;"></h3><div id="spotActions"></div></div></div>
 
-    <!-- Модалка 2 ряда -->
     <div id="modalRow2" class="modal">
         <div class="modal-content">
             <h3 style="margin-top:0; color:#ff9800;">🚗 Встать в проезде (2-й ряд)</h3>
             <input type="text" id="r2Car" placeholder="Номер авто (А123АА)">
             <input type="tel" id="r2Phone" placeholder="Телефон для связи">
             <input type="text" id="r2Time" placeholder="Уеду в... (напр. 08:30 утра)">
-            <p style="font-size:12px; color:#aaa; margin:6px 0 2px 0;">Нажмите на номера мест, которые перекрыли:</p>
+            <p style="font-size:12px; color:#aaa; margin:6px 0 2px 0;">Кого перекрыли (выберите номера мест):</p>
             <div id="r2SpotsChecklist" style="margin-bottom:10px; max-height:120px; overflow-y:auto;"></div>
             <button onclick="submitRow2Modal()" style="width:100%; padding:10px; background:#ff9800; color:#000; font-weight:bold; border:none; border-radius:6px; margin-bottom:6px;">Занять проезд</button>
             <button onclick="closeModal('modalRow2')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px;">Отмена</button>
         </div>
     </div>
 
-    <!-- Модалка проверки телефона -->
     <div id="modalConfirmLeave" class="modal">
         <div class="modal-content">
             <h3 style="margin-top:0; color:#f44336;">Освободить место</h3>

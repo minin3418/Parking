@@ -1,7 +1,51 @@
-let parkingData = { spots: [], blockers: [], config: { topCount: 16, bottomCount: 14 } };
+let parkingData = { spots: [], blockers: [] };
 let isAdmin = false;
 let adminPin = "";
 let r2Selected = [];
+
+// ТОЧНАЯ РАССТАНОВКА 31 МЕСТА ПО ВАШЕМУ ФОТО:
+const YARD_SPOTS = [
+    // ВЕРХНИЙ РЯД У ПЛОЩАДКИ (1-14) - ёлочкой под углом -18 градусов
+    ...Array.from({ length: 14 }, (_, i) => ({
+        id: i + 1,
+        x: 90 + i * 58,
+        y: 85,
+        w: 42,
+        h: 68,
+        angle: -18,
+        area: 'Верхний ряд (у площадки)'
+    })),
+    // ЛЕВЫЙ КАРМАН СНИЗУ (15-20) - прямо у подъезда
+    ...Array.from({ length: 6 }, (_, i) => ({
+        id: i + 15,
+        x: 75 + i * 44,
+        y: 285,
+        w: 38,
+        h: 70,
+        angle: 0,
+        area: 'Левый карман (у 1 подъезда)'
+    })),
+    // ЦЕНТРАЛЬНЫЙ КАРМАН СНИЗУ (21-24) - перед клумбой
+    ...Array.from({ length: 4 }, (_, i) => ({
+        id: i + 21,
+        x: 355 + i * 44,
+        y: 285,
+        w: 38,
+        h: 70,
+        angle: 0,
+        area: 'Центральный карман'
+    })),
+    // ПРАВЫЙ КАРМАН У ПОВОРОТА (25-31) - вдоль дуги тротуара (угол 22 градуса)
+    ...Array.from({ length: 7 }, (_, i) => ({
+        id: i + 25,
+        x: 555 + i * 54,
+        y: 295 - i * 9,
+        w: 40,
+        h: 70,
+        angle: 22,
+        area: 'Карман у поворота'
+    }))
+];
 
 async function loadData() {
     try {
@@ -16,53 +60,88 @@ async function loadData() {
 function render() {
     const spots = parkingData.spots || [];
     const blockers = parkingData.blockers || [];
-    const topContainer = document.getElementById('stallsTop');
-    const bottomContainer = document.getElementById('stallsBottom');
-    topContainer.innerHTML = '';
-    bottomContainer.innerHTML = '';
+    const slotsLayer = document.getElementById('slotsLayer');
+    const blockersLayer = document.getElementById('blockersLayer');
+    slotsLayer.innerHTML = '';
+    blockersLayer.innerHTML = '';
 
     let occupied = 0;
 
-    spots.forEach(spot => {
+    YARD_SPOTS.forEach(def => {
+        const spot = spots.find(s => s.id === def.id) || { id: def.id, occupiedBy: null };
         if (spot.occupiedBy) occupied++;
+
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
-        const div = document.createElement('div');
-        div.className = `stall ${spot.occupiedBy ? 'busy' : 'free'} ${isBlocked ? 'blocked' : ''}`;
+        const statusClass = spot.occupiedBy ? 'busy' : 'free';
+        const blockedClass = isBlocked ? 'blocked' : '';
 
-        const carLabel = spot.occupiedBy ? spot.occupiedBy.carNumber : 'Свободно';
-        div.innerHTML = `
-            <div class="stall-num">№${spot.id} ${isBlocked ? '⚠️' : ''}</div>
-            <div class="stall-car">${spot.occupiedBy ? spot.occupiedBy.carNumber : ''}</div>
-        `;
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', `stall-node ${statusClass} ${blockedClass}`);
+        g.setAttribute('transform', `translate(${def.x}, ${def.y}) rotate(${def.angle})`);
+        g.onclick = () => openSpotDetails(spot, def.area);
 
-        div.onclick = () => openSpotDetails(spot);
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', -def.w / 2);
+        rect.setAttribute('y', -def.h / 2);
+        rect.setAttribute('width', def.w);
+        rect.setAttribute('height', def.h);
+        g.appendChild(rect);
 
-        if (spot.row === 'top' || spot.id <= (parkingData.config ? parkingData.config.topCount : 16)) {
-            topContainer.appendChild(div);
-        } else {
-            bottomContainer.appendChild(div);
+        // Номер места
+        const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textNum.setAttribute('y', -16);
+        textNum.setAttribute('class', 'stall-text');
+        textNum.textContent = `№${def.id}${isBlocked ? '⚠️' : ''}`;
+        g.appendChild(textNum);
+
+        // Номер машины
+        if (spot.occupiedBy) {
+            const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            textCar.setAttribute('y', 14);
+            textCar.setAttribute('class', 'stall-car-text');
+            textCar.textContent = spot.occupiedBy.carNumber;
+            g.appendChild(textCar);
         }
+
+        slotsLayer.appendChild(g);
     });
 
     document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
     document.getElementById('statBlocked').innerText = blockers.length;
 
-    // Машины в проезде
-    const drivewayChips = document.getElementById('drivewayChips');
-    const drivewayEmpty = document.getElementById('drivewayEmpty');
-    drivewayChips.innerHTML = '';
+    // ВИЗУАЛИЗАЦИЯ 2-ГО РЯДА В ПРОЕЗДЕ:
+    blockers.forEach(b => {
+        // Находим среднюю позицию мест, которые машина перекрыла
+        const targetDefs = YARD_SPOTS.filter(s => b.blockedSpots && b.blockedSpots.includes(s.id));
+        if (targetDefs.length > 0) {
+            const avgX = targetDefs.reduce((acc, cur) => acc + cur.x, 0) / targetDefs.length;
+            const avgY = 195; // Уровень проезда
 
-    if (blockers.length === 0) {
-        drivewayEmpty.style.display = 'block';
-    } else {
-        drivewayEmpty.style.display = 'none';
-        blockers.forEach(b => {
-            const chip = document.createElement('div');
-            chip.className = 'blocker-car-chip';
-            chip.innerHTML = `🚗 ${b.carNumber} ➔ перекрыл №${(b.blockedSpots || []).join(', ')}`;
-            drivewayChips.appendChild(chip);
-        });
-    }
+            const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            bg.setAttribute('transform', `translate(${avgX}, ${avgY})`);
+            bg.onclick = () => requestLeaveRow2(b.id);
+
+            const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            r.setAttribute('x', -35);
+            r.setAttribute('y', -13);
+            r.setAttribute('width', 70);
+            r.setAttribute('height', 26);
+            r.setAttribute('rx', 6);
+            r.setAttribute('fill', '#e65100');
+            r.setAttribute('stroke', '#ffeb3b');
+            r.setAttribute('stroke-width', 2);
+            r.setAttribute('filter', 'drop-shadow(0 2px 5px rgba(0,0,0,0.8))');
+            bg.appendChild(r);
+
+            const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            t.setAttribute('class', 'stall-text');
+            t.setAttribute('font-size', '9');
+            t.textContent = `🚗 ${b.carNumber}`;
+            bg.appendChild(t);
+
+            blockersLayer.appendChild(bg);
+        }
+    });
 
     // Список 2 ряда внизу
     const bList = document.getElementById('blockersList');
@@ -83,11 +162,11 @@ function render() {
     }
 }
 
-function openSpotDetails(spot) {
+function openSpotDetails(spot, areaName) {
     const modal = document.getElementById('modalRow1');
     const title = document.getElementById('row1ModalTitle');
     const actions = document.getElementById('spotActions');
-    title.innerText = `Место №${spot.id}`;
+    title.innerText = `Место №${spot.id} (${areaName || 'Двор'})`;
 
     const blocker = (parkingData.blockers || []).find(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
     let blockerHtml = blocker ? `
@@ -276,26 +355,10 @@ async function toggleAdmin() {
         document.getElementById('roleBadge').innerText = '★ Админ';
         document.getElementById('roleBadge').style.background = '#4CAF50';
         document.getElementById('adminPanel').style.display = 'block';
-        if (parkingData.config) {
-            document.getElementById('cfgTop').value = parkingData.config.topCount;
-            document.getElementById('cfgBottom').value = parkingData.config.bottomCount;
-        }
         render();
     } else {
         alert('Неверный PIN!');
     }
-}
-
-async function saveRowConfig() {
-    const topCount = document.getElementById('cfgTop').value;
-    const bottomCount = document.getElementById('cfgBottom').value;
-    await fetch('/api/admin/config-rows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: adminPin, topCount, bottomCount })
-    });
-    alert('Схема рядов обновлена!');
-    loadData();
 }
 
 async function viewSurveyResults() {

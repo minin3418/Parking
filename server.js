@@ -11,33 +11,20 @@ app.use(express.json());
 app.use(express.static('public'));
 
 function getData() { 
-    let data = { spots: [], blockers: [], surveys: [], config: { topCount: 16, bottomCount: 14 } };
+    let data = { spots: [], blockers: [], surveys: [] };
     if (fs.existsSync(DB_FILE)) {
         try { data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')); } catch(e){}
     }
-    if (!data.config) data.config = { topCount: 16, bottomCount: 14 };
-    
-    // Инициализация мест под геометрию двора (16 сверху, 14 снизу = 30 мест)
-    const total = data.config.topCount + data.config.bottomCount;
-    if (!data.spots || data.spots.length === 0) {
-        data.spots = [];
-        for (let i = 1; i <= total; i++) {
-            data.spots.push({
-                id: i,
-                row: i <= data.config.topCount ? 'top' : 'bottom',
-                occupiedBy: null
-            });
-        }
+    // 31 реальное место двора
+    if (!data.spots || data.spots.length !== 31) {
+        data.spots = Array.from({ length: 31 }, (_, i) => ({ id: i + 1, occupiedBy: null }));
     }
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
     return data;
 }
 
-function saveData(data) { 
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); 
-}
-
+function saveData(data) { fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); }
 saveData(getData());
 
 app.get('/api/parking', (req, res) => res.json(getData()));
@@ -46,32 +33,9 @@ app.post('/api/admin/login', (req, res) => {
     res.json({ success: req.body.pin === ADMIN_PIN });
 });
 
-// АДМИН: Настройка количества мест в рядах
-app.post('/api/admin/config-rows', (req, res) => {
-    if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
-    const { topCount, bottomCount } = req.body;
-    const data = getData();
-    data.config = { topCount: parseInt(topCount), bottomCount: parseInt(bottomCount) };
-    
-    const total = data.config.topCount + data.config.bottomCount;
-    const oldSpots = data.spots || [];
-    data.spots = [];
-    for (let i = 1; i <= total; i++) {
-        const old = oldSpots.find(s => s.id === i);
-        data.spots.push({
-            id: i,
-            row: i <= data.config.topCount ? 'top' : 'bottom',
-            occupiedBy: old ? old.occupiedBy : null
-        });
-    }
-    saveData(data);
-    res.json({ success: true });
-});
-
 app.post('/api/park/row1', (req, res) => {
     let { spotId, carNumber, phone, apt } = req.body;
     if (!carNumber) return res.status(400).json({ error: 'Номер обязателен' });
-
     const data = getData();
     const spot = data.spots.find(s => s.id === spotId);
     if (spot) {
@@ -114,7 +78,6 @@ app.post('/api/leave/row1', (req, res) => {
 app.post('/api/park/row2', (req, res) => {
     let { carNumber, phone, leaveTime, blockedSpots } = req.body;
     if (!carNumber || !phone) return res.status(400).json({ error: 'Номер и телефон обязательны' });
-
     const data = getData();
     data.blockers.push({
         id: Date.now(),
@@ -169,5 +132,5 @@ app.post('/api/admin/surveys', (req, res) => {
 });
 
 app.listen(PORT, IP, () => {
-    console.log(`Сервер двора запущен на [${IP}]:${PORT}`);
+    console.log(`Сервер слушает на [${IP}]:${PORT}`);
 });
