@@ -125,6 +125,6 @@ app.get('/api/admin/surveys', (req, res) => {
     res.json(data.surveys || []);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Сервер готов на порту ${PORT}`);
 });
