@@ -33,11 +33,11 @@ function getData() {
     if (fs.existsSync(DB_FILE)) {
         try { data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')); } catch(e){}
     }
-    if (!data || !data.spots || data.spots.length !== 31) {
+    // Если структура старая или пустая - инициализируем с новыми названиями
+    if (!data || !data.spots || data.spots.length !== 31 || !data.landmarks) {
         data = getInitialData();
         saveData(data);
     }
-    if (!data.landmarks) data.landmarks = getInitialData().landmarks;
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
     return data;
@@ -52,6 +52,7 @@ app.post('/api/admin/login', (req, res) => {
     res.json({ success: req.body.pin === ADMIN_PIN });
 });
 
+// НАДЕЖНЫЙ МАРШРУТ СОХРАНЕНИЯ СХЕМЫ И НАДПИСЕЙ
 app.post('/api/admin/map-config', (req, res) => {
     if (req.body.pin !== ADMIN_PIN) return res.status(403).json({ error: 'Запрещено' });
     const data = getData();
