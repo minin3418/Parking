@@ -5,6 +5,24 @@ let isRow2Mode = false;
 let isEditMode = false;
 let r2Selected = [];
 
+function formatTime(iso) {
+    if (!iso) return 'Нет данных';
+    const d = new Date(iso);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (diffMin < 60) return `${h}:${m} (${diffMin} мин назад)`;
+    return `${h}:${m} (~${Math.floor(diffMin / 60)} ч назад)`;
+}
+
+function getShortTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+}
+
 async function loadData() {
     try {
         const res = await fetch('/api/parking');
@@ -15,12 +33,11 @@ async function loadData() {
     }
 }
 
-// ОТРИСОВКА РЕАЛИСТИЧНОЙ МАШИНКИ (ВИД СВЕРХУ)
-function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected) {
+// ОТРИСОВКА РЕАЛИСТИЧНОЙ МАШИНКИ (ВИД СВЕРХУ) + ВРЕМЯ НА КРЫШЕ
+function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAtStr) {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
     if (isFree) {
-        // Свободное место: разметочный карман + силуэт
         const stall = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         stall.setAttribute('x', -18);
         stall.setAttribute('y', -32);
@@ -33,7 +50,6 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected) {
         if (isBlocked && !isSelected) stall.setAttribute('stroke-dasharray', '4,3');
         g.appendChild(stall);
 
-        // Номер места
         const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         textNum.setAttribute('y', 4);
         textNum.setAttribute('fill', '#81c784');
@@ -45,8 +61,6 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected) {
         g.appendChild(textNum);
 
     } else {
-        // Занятое место: КРАСИВАЯ МАШИНКА ВИД СВЕРХУ
-        // Кузов
         const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         body.setAttribute('x', -16);
         body.setAttribute('y', -30);
@@ -59,37 +73,33 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected) {
         if (isBlocked && !isSelected) body.setAttribute('stroke-dasharray', '4,3');
         g.appendChild(body);
 
-        // Зеркала
         const m1 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         m1.setAttribute('x', -19); m1.setAttribute('y', -18); m1.setAttribute('width', 3); m1.setAttribute('height', 6); m1.setAttribute('fill', '#888');
         const m2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         m2.setAttribute('x', 16); m2.setAttribute('y', -18); m2.setAttribute('width', 3); m2.setAttribute('height', 6); m2.setAttribute('fill', '#888');
         g.appendChild(m1); g.appendChild(m2);
 
-        // Лобовое стекло
         const frontGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         frontGlass.setAttribute('d', 'M -11 -12 L -9 -21 Q 0 -23 9 -21 L 11 -12 Z');
         frontGlass.setAttribute('fill', '#111');
         frontGlass.setAttribute('opacity', '0.8');
         g.appendChild(frontGlass);
 
-        // Заднее стекло
         const rearGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         rearGlass.setAttribute('d', 'M -11 15 L -9 22 Q 0 23 9 22 L 11 15 Z');
         rearGlass.setAttribute('fill', '#111');
         rearGlass.setAttribute('opacity', '0.8');
         g.appendChild(rearGlass);
 
-        // Фары
         const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         l1.setAttribute('cx', -10); l1.setAttribute('cy', -28); l1.setAttribute('r', 2); l1.setAttribute('fill', '#fff9c4');
         const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         l2.setAttribute('cx', 10); l2.setAttribute('cy', -28); l2.setAttribute('r', 2); l2.setAttribute('fill', '#fff9c4');
         g.appendChild(l1); g.appendChild(l2);
 
-        // Номер машины на крыше
+        // Номер машины
         const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textCar.setAttribute('y', 2);
+        textCar.setAttribute('y', -2);
         textCar.setAttribute('fill', '#ffffff');
         textCar.setAttribute('font-size', '8');
         textCar.setAttribute('font-weight', 'bold');
@@ -97,6 +107,18 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected) {
         textCar.setAttribute('dominant-baseline', 'middle');
         textCar.textContent = carNumber || `№${spotId}`;
         g.appendChild(textCar);
+
+        // Время парковки на крыше (если есть)
+        if (parkedAtStr) {
+            const textTime = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            textTime.setAttribute('y', 8);
+            textTime.setAttribute('fill', '#ffeb3b');
+            textTime.setAttribute('font-size', '6');
+            textTime.setAttribute('text-anchor', 'middle');
+            textTime.setAttribute('dominant-baseline', 'middle');
+            textTime.textContent = getShortTime(parkedAtStr);
+            g.appendChild(textTime);
+        }
     }
 
     return g;
@@ -116,7 +138,6 @@ function render() {
 
     let occupied = 0;
 
-    // Отрисовка надписей и ориентиров двора
     landmarks.forEach(lm => {
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', lm.x);
@@ -140,7 +161,6 @@ function render() {
         landmarksLayer.appendChild(text);
     });
 
-    // Отрисовка 31 машинки
     spots.forEach(spot => {
         if (spot.occupiedBy) occupied++;
 
@@ -165,7 +185,8 @@ function render() {
             }
         };
 
-        const carSvg = createCarSvg(!spot.occupiedBy, spot.occupiedBy ? spot.occupiedBy.carNumber : '', spot.id, isBlocked, isSelected);
+        const parkedAtStr = spot.occupiedBy ? spot.occupiedBy.parkedAt : null;
+        const carSvg = createCarSvg(!spot.occupiedBy, spot.occupiedBy ? spot.occupiedBy.carNumber : '', spot.id, isBlocked, isSelected, parkedAtStr);
         g.appendChild(carSvg);
         slotsLayer.appendChild(g);
     });
@@ -173,7 +194,6 @@ function render() {
     document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
     document.getElementById('statBlocked').innerText = blockers.length;
 
-    // Отрисовка подпирающих во 2-м ряду в проезде
     blockers.forEach(b => {
         const targetDefs = spots.filter(s => b.blockedSpots && b.blockedSpots.includes(s.id));
         if (targetDefs.length > 0) {
@@ -184,13 +204,13 @@ function render() {
             bg.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
             bg.onclick = () => requestLeaveRow2(b.id);
 
-            const carSvg = createCarSvg(false, b.carNumber, '', false, false);
+            const carSvg = createCarSvg(false, b.carNumber, '', false, false, Date.now() /* заглушка для вида */);
+            
             bg.appendChild(carSvg);
             blockersLayer.appendChild(bg);
         }
     });
 
-    // Список 2 ряда внизу
     const bList = document.getElementById('blockersList');
     if (blockers.length === 0) {
         bList.innerHTML = '<p style="color:#666; font-size:14px;">Второй ряд свободен</p>';
@@ -209,7 +229,6 @@ function render() {
     }
 }
 
-// РЕЖИМ РЕДАКТОРА СХЕМЫ И НАДПИСЕЙ
 function toggleMapEdit() {
     isEditMode = !isEditMode;
     document.getElementById('btnSaveMap').style.display = isEditMode ? 'block' : 'none';
@@ -229,7 +248,6 @@ async function saveMapConfig() {
     loadData();
 }
 
-// 2-й ряд: выбор на карте
 function startRow2Selection() {
     isRow2Mode = true;
     r2Selected = [];
@@ -312,6 +330,7 @@ function openSpotDetails(spot) {
             ${blockerHtml}
             <p style="margin:4px 0;">Занято: <b>${spot.occupiedBy.carNumber}</b></p>
             <p style="margin:4px 0; color:#aaa; font-size:13px;">Кв: ${spot.occupiedBy.apt || '—'} | Тел: ${spot.occupiedBy.phone || '—'}</p>
+            <p style="margin:8px 0 12px 0; color:#ffeb3b; font-size:13px;">🕑 Время парковки: <b>${formatTime(spot.occupiedBy.parkedAt)}</b></p>
             <button onclick="requestLeaveRow1(${spot.id})" style="width:100%; padding:10px; background:#d32f2f; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; margin-top:8px;">
                 ${isAdmin ? '★ Освободить (Админ)' : 'Освободить место'}
             </button>
