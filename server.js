@@ -15,9 +15,13 @@ function getData() {
     if (fs.existsSync(DB_FILE)) {
         try { data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')); } catch(e){}
     }
-    // 31 реальное место двора
+    // Гарантируем ровно 31 место под реальный двор
     if (!data.spots || data.spots.length !== 31) {
-        data.spots = Array.from({ length: 31 }, (_, i) => ({ id: i + 1, occupiedBy: null }));
+        const oldSpots = data.spots || [];
+        data.spots = Array.from({ length: 31 }, (_, i) => {
+            const old = oldSpots.find(s => s.id === i + 1);
+            return old || { id: i + 1, occupiedBy: null };
+        });
     }
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];

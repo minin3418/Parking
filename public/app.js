@@ -3,9 +3,8 @@ let isAdmin = false;
 let adminPin = "";
 let r2Selected = [];
 
-// ТОЧНАЯ РАССТАНОВКА 31 МЕСТА ПО ВАШЕМУ ФОТО:
 const YARD_SPOTS = [
-    // ВЕРХНИЙ РЯД У ПЛОЩАДКИ (1-14) - ёлочкой под углом -18 градусов
+    // ВЕРХНИЙ РЯД У ПЛОЩАДКИ (1-14)
     ...Array.from({ length: 14 }, (_, i) => ({
         id: i + 1,
         x: 90 + i * 58,
@@ -15,7 +14,7 @@ const YARD_SPOTS = [
         angle: -18,
         area: 'Верхний ряд (у площадки)'
     })),
-    // ЛЕВЫЙ КАРМАН СНИЗУ (15-20) - прямо у подъезда
+    // ЛЕВЫЙ КАРМАН СНИЗУ (15-20)
     ...Array.from({ length: 6 }, (_, i) => ({
         id: i + 15,
         x: 75 + i * 44,
@@ -25,7 +24,7 @@ const YARD_SPOTS = [
         angle: 0,
         area: 'Левый карман (у 1 подъезда)'
     })),
-    // ЦЕНТРАЛЬНЫЙ КАРМАН СНИЗУ (21-24) - перед клумбой
+    // ЦЕНТРАЛЬНЫЙ КАРМАН СНИЗУ (21-24)
     ...Array.from({ length: 4 }, (_, i) => ({
         id: i + 21,
         x: 355 + i * 44,
@@ -35,7 +34,7 @@ const YARD_SPOTS = [
         angle: 0,
         area: 'Центральный карман'
     })),
-    // ПРАВЫЙ КАРМАН У ПОВОРОТА (25-31) - вдоль дуги тротуара (угол 22 градуса)
+    // ПРАВЫЙ КАРМАН У ПОВОРОТА (25-31)
     ...Array.from({ length: 7 }, (_, i) => ({
         id: i + 25,
         x: 555 + i * 54,
@@ -53,7 +52,7 @@ async function loadData() {
         parkingData = await res.json();
         render();
     } catch(e) {
-        console.error("Ошибка загрузки данных", e);
+        console.error("Ошибка загрузки", e);
     }
 }
 
@@ -87,14 +86,12 @@ function render() {
         rect.setAttribute('height', def.h);
         g.appendChild(rect);
 
-        // Номер места
         const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         textNum.setAttribute('y', -16);
         textNum.setAttribute('class', 'stall-text');
         textNum.textContent = `№${def.id}${isBlocked ? '⚠️' : ''}`;
         g.appendChild(textNum);
 
-        // Номер машины
         if (spot.occupiedBy) {
             const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             textCar.setAttribute('y', 14);
@@ -109,13 +106,12 @@ function render() {
     document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
     document.getElementById('statBlocked').innerText = blockers.length;
 
-    // ВИЗУАЛИЗАЦИЯ 2-ГО РЯДА В ПРОЕЗДЕ:
+    // Машины 2-го ряда в проезде
     blockers.forEach(b => {
-        // Находим среднюю позицию мест, которые машина перекрыла
         const targetDefs = YARD_SPOTS.filter(s => b.blockedSpots && b.blockedSpots.includes(s.id));
         if (targetDefs.length > 0) {
             const avgX = targetDefs.reduce((acc, cur) => acc + cur.x, 0) / targetDefs.length;
-            const avgY = 195; // Уровень проезда
+            const avgY = 195;
 
             const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             bg.setAttribute('transform', `translate(${avgX}, ${avgY})`);
@@ -143,7 +139,6 @@ function render() {
         }
     });
 
-    // Список 2 ряда внизу
     const bList = document.getElementById('blockersList');
     if (blockers.length === 0) {
         bList.innerHTML = '<p style="color:#666; font-size:14px;">Второй ряд свободен</p>';
@@ -255,7 +250,7 @@ async function leaveRow1(spotId, phoneDigits, pin) {
     }
 }
 
-// 2-й ряд
+// 2-й ряд: УДОБНАЯ ГРУППИРОВКА (15-31 сверху!)
 function openRow2Modal() {
     r2Selected = [];
     document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
@@ -263,9 +258,21 @@ function openRow2Modal() {
     document.getElementById('r2Time').value = '08:30 утра';
 
     const checklist = document.getElementById('r2SpotsChecklist');
-    checklist.innerHTML = (parkingData.spots || []).map(s => `
-        <span class="spot-badge" id="badge_${s.id}" onclick="toggleSpotBadge(${s.id})">№${s.id}</span>
-    `).join('');
+    
+    // Сначала показываем места 15-31 (которые обычно подпирают!), а затем 1-14
+    const bottomSpots = YARD_SPOTS.filter(s => s.id >= 15);
+    const topSpots = YARD_SPOTS.filter(s => s.id < 15);
+
+    checklist.innerHTML = `
+        <div style="color:#ff9800; font-weight:bold; font-size:12px; margin:4px 0;">🏢 У подъездов и карманов (15–31) — обычно здесь:</div>
+        <div>
+            ${bottomSpots.map(s => `<span class="spot-badge" id="badge_${s.id}" onclick="toggleSpotBadge(${s.id})">№${s.id}</span>`).join('')}
+        </div>
+        <div style="color:#81c784; font-weight:bold; font-size:12px; margin:8px 0 4px 0;">🛝 Вдоль площадки (1–14):</div>
+        <div>
+            ${topSpots.map(s => `<span class="spot-badge" id="badge_${s.id}" onclick="toggleSpotBadge(${s.id})">№${s.id}</span>`).join('')}
+        </div>
+    `;
 
     document.getElementById('modalRow2').style.display = 'flex';
 }
@@ -332,7 +339,6 @@ async function leaveRow2(blockerId, phoneDigits, pin) {
     }
 }
 
-// Админка
 async function toggleAdmin() {
     if (isAdmin) {
         isAdmin = false;
