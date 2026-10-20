@@ -1,6 +1,7 @@
 let parkingData = { spots: [], blockers: [] };
 let isAdmin = false;
 let adminPin = "";
+let isRow2Mode = false;
 let r2Selected = [];
 
 const YARD_SPOTS = [
@@ -71,13 +72,30 @@ function render() {
         if (spot.occupiedBy) occupied++;
 
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
+        const isSelectedByMe = r2Selected.includes(spot.id);
+
         const statusClass = spot.occupiedBy ? 'busy' : 'free';
         const blockedClass = isBlocked ? 'blocked' : '';
+        const selectedClass = isSelectedByMe ? 'selected' : '';
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `stall-node ${statusClass} ${blockedClass}`);
+        g.setAttribute('class', `stall-node ${statusClass} ${blockedClass} ${selectedClass}`);
         g.setAttribute('transform', `translate(${def.x}, ${def.y}) rotate(${def.angle})`);
-        g.onclick = () => openSpotDetails(spot, def.area);
+
+        g.onclick = () => {
+            if (isRow2Mode) {
+                // ИНТЕРАКТИВНЫЙ ВЫБОР ПАЛЬЦЕМ НА КАРТЕ
+                if (r2Selected.includes(spot.id)) {
+                    r2Selected = r2Selected.filter(id => id !== spot.id);
+                } else {
+                    r2Selected.push(spot.id);
+                }
+                updateRow2SheetText();
+                render();
+            } else {
+                openSpotDetails(spot, def.area);
+            }
+        };
 
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rect.setAttribute('x', -def.w / 2);
@@ -89,7 +107,7 @@ function render() {
         const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         textNum.setAttribute('y', -16);
         textNum.setAttribute('class', 'stall-text');
-        textNum.textContent = `№${def.id}${isBlocked ? '⚠️' : ''}`;
+        textNum.textContent = `№${def.id}${isSelectedByMe ? ' ✅' : (isBlocked ? '⚠️' : '')}`;
         g.appendChild(textNum);
 
         if (spot.occupiedBy) {
@@ -139,6 +157,7 @@ function render() {
         }
     });
 
+    // Список 2 ряда внизу
     const bList = document.getElementById('blockersList');
     if (blockers.length === 0) {
         bList.innerHTML = '<p style="color:#666; font-size:14px;">Второй ряд свободен</p>';
@@ -155,6 +174,66 @@ function render() {
             </div>
         `).join('');
     }
+}
+
+// РЕЖИМ ПОДПИРАНИЯ
+function startRow2Selection() {
+    isRow2Mode = true;
+    r2Selected = [];
+    document.getElementById('btnStartRow2').style.display = 'none';
+    document.getElementById('sheetRow2').style.display = 'block';
+    
+    document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
+    document.getElementById('r2Phone').value = localStorage.getItem('my_phone') || '';
+    document.getElementById('r2Time').value = '08:30 утра';
+
+    const inst = document.getElementById('instructionText');
+    inst.className = 'instruction-bar select-mode';
+    inst.innerHTML = '👉 <b>НАЖМИТЕ НА КАРТЕ</b> на машины, которые вы перекрыли:';
+    
+    updateRow2SheetText();
+    render();
+}
+
+function cancelRow2Selection() {
+    isRow2Mode = false;
+    r2Selected = [];
+    document.getElementById('btnStartRow2').style.display = 'block';
+    document.getElementById('sheetRow2').style.display = 'none';
+
+    const inst = document.getElementById('instructionText');
+    inst.className = 'instruction-bar';
+    inst.innerHTML = '👉 Листайте карту двора влево-вправо ⇄ Нажмите на свободное место, чтобы занять.';
+
+    render();
+}
+
+function updateRow2SheetText() {
+    const textEl = document.getElementById('sheetSelectedSpots');
+    if (r2Selected.length === 0) {
+        textEl.innerText = 'Нажмите на карте';
+    } else {
+        textEl.innerText = '№' + r2Selected.sort((a,b)=>a-b).join(', №');
+    }
+}
+
+async function submitRow2() {
+    if (r2Selected.length === 0) return alert('Нажмите на карте хотя бы на одну машину, которую перекрыли!');
+    const carNumber = document.getElementById('r2Car').value.trim().toUpperCase();
+    const phone = document.getElementById('r2Phone').value.trim();
+    const leaveTime = document.getElementById('r2Time').value.trim();
+    if (!carNumber || !phone) return alert('Укажите номер и телефон!');
+
+    localStorage.setItem('my_car', carNumber);
+    localStorage.setItem('my_phone', phone);
+
+    await fetch('/api/park/row2', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ carNumber, phone, leaveTime, blockedSpots: r2Selected })
+    });
+    cancelRow2Selection();
+    loadData();
 }
 
 function openSpotDetails(spot, areaName) {
@@ -248,63 +327,6 @@ async function leaveRow1(spotId, phoneDigits, pin) {
         closeModal('modalConfirmLeave');
         loadData();
     }
-}
-
-// 2-й ряд: УДОБНАЯ ГРУППИРОВКА (15-31 сверху!)
-function openRow2Modal() {
-    r2Selected = [];
-    document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
-    document.getElementById('r2Phone').value = localStorage.getItem('my_phone') || '';
-    document.getElementById('r2Time').value = '08:30 утра';
-
-    const checklist = document.getElementById('r2SpotsChecklist');
-    
-    // Сначала показываем места 15-31 (которые обычно подпирают!), а затем 1-14
-    const bottomSpots = YARD_SPOTS.filter(s => s.id >= 15);
-    const topSpots = YARD_SPOTS.filter(s => s.id < 15);
-
-    checklist.innerHTML = `
-        <div style="color:#ff9800; font-weight:bold; font-size:12px; margin:4px 0;">🏢 У подъездов и карманов (15–31) — обычно здесь:</div>
-        <div>
-            ${bottomSpots.map(s => `<span class="spot-badge" id="badge_${s.id}" onclick="toggleSpotBadge(${s.id})">№${s.id}</span>`).join('')}
-        </div>
-        <div style="color:#81c784; font-weight:bold; font-size:12px; margin:8px 0 4px 0;">🛝 Вдоль площадки (1–14):</div>
-        <div>
-            ${topSpots.map(s => `<span class="spot-badge" id="badge_${s.id}" onclick="toggleSpotBadge(${s.id})">№${s.id}</span>`).join('')}
-        </div>
-    `;
-
-    document.getElementById('modalRow2').style.display = 'flex';
-}
-
-function toggleSpotBadge(id) {
-    const el = document.getElementById('badge_' + id);
-    if (r2Selected.includes(id)) {
-        r2Selected = r2Selected.filter(x => x !== id);
-        el.classList.remove('active');
-    } else {
-        r2Selected.push(id);
-        el.classList.add('active');
-    }
-}
-
-async function submitRow2Modal() {
-    const carNumber = document.getElementById('r2Car').value.trim().toUpperCase();
-    const phone = document.getElementById('r2Phone').value.trim();
-    const leaveTime = document.getElementById('r2Time').value.trim();
-    if (!carNumber || !phone) return alert('Укажите номер и телефон!');
-    if (r2Selected.length === 0) return alert('Выберите хотя бы одно перекрытое место!');
-
-    localStorage.setItem('my_car', carNumber);
-    localStorage.setItem('my_phone', phone);
-
-    await fetch('/api/park/row2', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ carNumber, phone, leaveTime, blockedSpots: r2Selected })
-    });
-    closeModal('modalRow2');
-    loadData();
 }
 
 function requestLeaveRow2(blockerId) {
