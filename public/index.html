@@ -18,7 +18,6 @@
         .yard-map-container { background: #18191c; border: 2px solid #333; border-radius: 12px; overflow-x: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.6); -webkit-overflow-scrolling: touch; margin-bottom: 12px; }
         .yard-svg { display: block; min-width: 960px; height: 440px; }
 
-        /* МАШИНКИ И КАРМАНЫ */
         .stall-node { cursor: pointer; }
         .stall-node:hover { filter: brightness(1.15); }
         .landmark-text { cursor: default; user-select: none; }
@@ -46,7 +45,6 @@
         <button id="roleBadge" class="admin-badge" onclick="toggleAdmin()">Режим: Житель</button>
     </header>
 
-    <!-- ПАНЕЛЬ АДМИНА С РЕДАКТОРОМ -->
     <div id="adminPanel" class="admin-controls">
         <b style="color: #e91e63;">★ Панель Администратора</b>
         <div style="display:flex; gap:8px; margin-top:8px;">
@@ -54,9 +52,9 @@
             <button onclick="saveMapConfig()" id="btnSaveMap" style="flex:1; padding:8px; background:#4CAF50; color:#fff; font-weight:bold; border:none; border-radius:4px; display:none;">💾 Сохранить</button>
         </div>
         <div id="editHint" style="display:none; color:#ffeb3b; font-size:12px; margin-top:6px;">
-            ✏️ Нажмите на <u>любую надпись на карте</u> (арка, подъезд, площадка), чтобы изменить её текст!
+            ✏️ Нажмите на <u>любую надпись на карте</u>, чтобы изменить её текст!
         </div>
-        <button onclick="viewSurveyResults()" style="width:100%; margin-top:8px; padding:8px; background:#00bcd4; color:#000; font-weight:bold; border:none; border-radius:4px;">📊 Ответы жильцов на опрос</button>
+        <button onclick="viewSurveyResults()" style="width:100%; margin-top:8px; padding:8px; background:#00bcd4; color:#000; font-weight:bold; border:none; border-radius:4px;">📊 Ответы жильцов</button>
     </div>
 
     <div class="stats-bar">
@@ -66,47 +64,41 @@
 
     <div id="instructionText" class="instruction-bar">👉 Листайте схему влево-вправо ⇄ Нажмите на машинку, чтобы занять.</div>
 
-    <!-- ВЕКТОРНАЯ КАРТА ДВОРА -->
     <div class="yard-map-container">
         <svg id="yardSvg" class="yard-svg" viewBox="0 0 960 440" xmlns="http://www.w3.org/2000/svg">
             <rect x="0" y="0" width="960" height="35" fill="#2d221e" />
-            <rect x="30" y="25" width="60" height="15" fill="#f6e05e" opacity="0.4" />
 
             <!-- ДЕТСКАЯ ПЛОЩАДКА -->
             <rect x="240" y="10" width="460" height="45" rx="6" fill="#1b241b" stroke="#334433" stroke-width="1.5" />
             
-            <!-- S-ОБРАЗНЫЙ ПРОЕЗД -->
+            <!-- ПРОЕЗД -->
             <path d="M 0,200 Q 400,230 700,200 T 960,160" fill="none" stroke="#25272a" stroke-width="110" />
             <path d="M 0,205 Q 400,235 700,205 T 960,165" fill="none" stroke="#444" stroke-width="2" stroke-dasharray="10,10" />
 
-            <!-- ШЕСТИУГОЛЬНАЯ КЛУМБА -->
-            <polygon points="450,420 475,375 525,375 550,420 525,435 475,435" fill="#1e3a20" stroke="#38761d" stroke-width="2" />
+            <!-- МАГАЗИН (СЕРОЕ ЗДАНИЕ ВМЕСТО КЛУМБЫ) -->
+            <rect x="450" y="380" width="100" height="60" rx="4" fill="#37474f" stroke="#546e7a" stroke-width="2" />
 
-            <!-- НАДПИСИ И ОРИЕНТИРЫ -->
             <g id="landmarksLayer"></g>
-
-            <!-- МАШИНКИ И КАРМАНЫ -->
             <g id="slotsLayer"></g>
-
-            <!-- 2-Й РЯД В ПРОЕЗДЕ -->
             <g id="blockersLayer"></g>
         </svg>
     </div>
 
     <button id="btnStartRow2" class="btn-main" onclick="startRow2Selection()">+ Встать во 2-й ряд (Подпереть)</button>
 
-    <!-- ВЫЕЗЖАЮЩАЯ ШТОРКА ДЛЯ 2-ГО РЯДА -->
     <div id="sheetRow2" class="bottom-sheet">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <span style="font-size:14px; font-weight:bold; color:#ff9800;">🚗 Перекрыты: <span id="sheetSelectedSpots" style="color:#ffeb3b; font-size:16px;">Нажмите на карте</span></span>
             <button onclick="cancelRow2Selection()" style="background:none; border:none; color:#aaa; font-size:18px; cursor:pointer;">✕</button>
         </div>
-        <input type="text" id="r2Car" placeholder="Номер вашего авто (А123АА)">
-        <input type="tel" id="r2Phone" placeholder="Ваш телефон для связи">
-        <input type="text" id="r2Time" placeholder="Во сколько уедете? (напр. 08:30 утра)">
+        <input type="text" id="r2Car" placeholder="Номер авто (А123АА)">
+        <input type="tel" id="r2Phone" placeholder="Ваш телефон">
+        <input type="text" id="r2Time" placeholder="Уеду в... (08:30 утра)">
         <button onclick="submitRow2()" style="width:100%; padding:12px; background:#ff9800; color:#000; font-weight:bold; border:none; border-radius:6px; margin-top:4px; font-size:15px; cursor:pointer;">Подтвердить</button>
     </div>
 
+    <!-- ...модалки и скрипт оставить без изменений с прошлого апдейта... -->
+    
     <div class="survey-card">
         <h4>📊 Опрос соседей</h4>
         <div id="surveyForm">
@@ -122,19 +114,20 @@
     <h3>Машины во 2-м ряду (подпёрли):</h3>
     <div id="blockersList"></div>
 
+    <!-- Модалки -->
     <div id="modalRow1" class="modal"><div class="modal-content"><h3 id="row1ModalTitle" style="margin-top:0;"></h3><div id="spotActions"></div></div></div>
-
+    
     <div id="modalConfirmLeave" class="modal">
         <div class="modal-content">
             <h3 style="margin-top:0; color:#f44336;">Освободить место</h3>
-            <p style="font-size:13px; color:#aaa; margin:0 0 10px 0;">Введите последние 4 цифры вашего телефона:</p>
+            <p style="font-size:13px; color:#aaa; margin:0 0 10px 0;">Введите последние 4 цифры телефона:</p>
             <input type="tel" id="confirmDigits" placeholder="4 цифры (напр. 4589)" maxlength="4" style="text-align:center; font-size:18px; letter-spacing:4px;">
             <div id="confirmError" style="color:#f44336; font-size:12px; display:none; margin-bottom:8px;"></div>
             <button id="btnConfirmLeave" style="width:100%; padding:10px; background:#f44336; color:#fff; font-weight:bold; border:none; border-radius:6px; margin-bottom:6px;">Подтвердить</button>
             <button onclick="closeModal('modalConfirmLeave')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px;">Отмена</button>
         </div>
     </div>
-
+    
     <div id="modalSurveys" class="modal"><div class="modal-content" style="max-height:80vh; overflow-y:auto;"><h3 style="color:#00bcd4; margin-top:0;">Ответы соседей</h3><div id="surveyAnswersList"></div><button onclick="closeModal('modalSurveys')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:10px;">Закрыть</button></div></div>
 
     <script src="/app.js"></script>
