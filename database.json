@@ -2,39 +2,246 @@
   "spots": [
     {
       "id": 1,
+      "x": 90,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 2,
+      "x": 148,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 3,
+      "x": 206,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 4,
+      "x": 264,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 5,
+      "x": 322,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 6,
+      "x": 380,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 7,
+      "x": 438,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 8,
+      "x": 496,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
     },
     {
       "id": 9,
+      "x": 554,
+      "y": 90,
+      "angle": -18,
       "occupiedBy": null
+    },
+    {
+      "id": 10,
+      "x": 612,
+      "y": 90,
+      "angle": -18,
+      "occupiedBy": null
+    },
+    {
+      "id": 11,
+      "x": 670,
+      "y": 90,
+      "angle": -18,
+      "occupiedBy": null
+    },
+    {
+      "id": 12,
+      "x": 728,
+      "y": 90,
+      "angle": -18,
+      "occupiedBy": null
+    },
+    {
+      "id": 13,
+      "x": 786,
+      "y": 90,
+      "angle": -18,
+      "occupiedBy": null
+    },
+    {
+      "id": 14,
+      "x": 844,
+      "y": 90,
+      "angle": -18,
+      "occupiedBy": null
+    },
+    {
+      "id": 15,
+      "x": 75,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 16,
+      "x": 119,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 17,
+      "x": 163,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 18,
+      "x": 207,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 19,
+      "x": 251,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 20,
+      "x": 295,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 21,
+      "x": 355,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 22,
+      "x": 399,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 23,
+      "x": 443,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 24,
+      "x": 487,
+      "y": 285,
+      "angle": 0,
+      "occupiedBy": null
+    },
+    {
+      "id": 25,
+      "x": 555,
+      "y": 295,
+      "angle": 22,
+      "occupiedBy": null
+    },
+    {
+      "id": 26,
+      "x": 609,
+      "y": 286,
+      "angle": 22,
+      "occupiedBy": null
+    },
+    {
+      "id": 27,
+      "x": 663,
+      "y": 277,
+      "angle": 22,
+      "occupiedBy": null
+    },
+    {
+      "id": 28,
+      "x": 717,
+      "y": 268,
+      "angle": 22,
+      "occupiedBy": null
+    },
+    {
+      "id": 29,
+      "x": 771,
+      "y": 259,
+      "angle": 22,
+      "occupiedBy": null
+    },
+    {
+      "id": 30,
+      "x": 825,
+      "y": 250,
+      "angle": 22,
+      "occupiedBy": null
+    },
+    {
+      "id": 31,
+      "x": 879,
+      "y": 241,
+      "angle": 22,
+      "occupiedBy": null
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "lm2",
+      "text": "🛝 ДЕТСКАЯ ПЛОЩАДКА",
+      "x": 470,
+      "y": 36
+    },
+    {
+      "id": "lm3",
+      "text": "🏢 КАРБЫШЕВА 22",
+      "x": 150,
+      "y": 425
+    },
+    {
+      "id": "lm4",
+      "text": "🏪 МАГАЗИН",
+      "x": 500,
+      "y": 415
+    },
+    {
+      "id": "lm5",
+      "text": "🏢 КАРБЫШЕВА 22А",
+      "x": 820,
+      "y": 425
     }
   ],
   "blockers": [],

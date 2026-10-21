@@ -5,6 +5,11 @@ let isRow2Mode = false;
 let isEditMode = false;
 let r2Selected = [];
 
+function closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+
 function formatTime(iso) {
     if (!iso) return 'Нет данных';
     const d = new Date(iso);
@@ -113,7 +118,7 @@ function render() {
     const slotsLayer = document.getElementById('slotsLayer');
     const blockersLayer = document.getElementById('blockersLayer');
     const landmarksLayer = document.getElementById('landmarksLayer');
-    
+
     slotsLayer.innerHTML = '';
     blockersLayer.innerHTML = '';
     landmarksLayer.innerHTML = '';
@@ -130,8 +135,7 @@ function render() {
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('class', `landmark-text ${isEditMode ? 'editable-landmark' : ''}`);
         text.textContent = lm.text;
-        
-        // КЛИК ПО НАДПИСИ ДЛЯ ИЗМЕНЕНИЯ ПРЯМО В РЕЖИМЕ АДМИНА
+
         text.onclick = () => {
             if (!isEditMode) return;
             const newText = prompt(`Изменить надпись "${lm.text}":`, lm.text);
@@ -145,7 +149,6 @@ function render() {
 
     spots.forEach(spot => {
         if (spot.occupiedBy) occupied++;
-
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
         const isSelected = r2Selected.includes(spot.id);
 
@@ -181,12 +184,10 @@ function render() {
         if (targetDefs.length > 0) {
             const avgX = targetDefs.reduce((acc, cur) => acc + cur.x, 0) / targetDefs.length;
             const avgY = 195;
-
             const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             bg.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
             bg.onclick = () => requestLeaveRow2(b.id);
-
-            const carSvg = createCarSvg(false, b.carNumber, '', false, false, Date.now());
+            const carSvg = createCarSvg(false, b.carNumber, '', false, false, null);
             bg.appendChild(carSvg);
             blockersLayer.appendChild(bg);
         }
@@ -234,7 +235,7 @@ function startRow2Selection() {
     r2Selected = [];
     document.getElementById('btnStartRow2').style.display = 'none';
     document.getElementById('sheetRow2').style.display = 'block';
-    
+
     document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
     document.getElementById('r2Phone').value = localStorage.getItem('my_phone') || '';
     document.getElementById('r2Time').value = '08:30 утра';
@@ -242,7 +243,7 @@ function startRow2Selection() {
     const inst = document.getElementById('instructionText');
     inst.className = 'instruction-bar select-mode';
     inst.innerHTML = '👉 <b>НАЖМИТЕ НА КАРТЕ</b> на машины, которые вы перекрыли:';
-    
+
     updateRow2SheetText();
     render();
 }
@@ -436,7 +437,7 @@ async function toggleAdmin() {
         isAdmin = true;
         adminPin = pin;
         document.getElementById('roleBadge').innerText = '★ Админ';
-        document.getElementById('roleBadge`').style.background = '#4CAF50';
+        document.getElementById('roleBadge').style.background = '#4CAF50';
         document.getElementById('adminPanel').style.display = 'block';
         render();
     } else {
@@ -477,17 +478,8 @@ async function submitSurvey() {
             comment: document.getElementById('surveyComment').value.trim()
         })
     });
-    localStorage.setItem('parking_voted', '1');
     document.getElementById('surveyForm').style.display = 'none';
     document.getElementById('surveySuccess').style.display = 'block';
 }
 
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-
-if (localStorage.getItem('parking_voted')) {
-    document.getElementById('surveyForm').style.display = 'none';
-    document.getElementById('surveySuccess').style.display = 'block';
-}
-
-loadData();
-setInterval(loadData, 3000);
+window.onload = loadData;
