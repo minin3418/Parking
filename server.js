@@ -71,6 +71,7 @@ app.post('/api/park/row1', (req, res) => {
             carNumber: carNumber.toUpperCase().trim(),
             phone: (phone || '').trim(),
             apt: (apt || '').trim(),
+            leaveTime: (leaveTime || '').trim(), // <-- добавить эту строчку
             parkedAt: new Date().toISOString()
         };
         saveData(data);
