@@ -1,7 +1,6 @@
 const express = require('express');
 const fs = require('fs');
 const app = express();
-
 const PORT = process.env.PORT || 8100;
 const IP = process.env.IP || '::';
 const DB_FILE = './database.json';
@@ -17,14 +16,12 @@ function getInitialData() {
         ...Array.from({ length: 4 }, (_, i) => ({ id: i + 21, x: 355 + i * 44, y: 285, angle: 0, occupiedBy: null })),
         ...Array.from({ length: 7 }, (_, i) => ({ id: i + 25, x: 555 + i * 54, y: 295 - i * 9, angle: 22, occupiedBy: null }))
     ];
-
     const landmarks = [
         { id: 'lm2', text: '🛝 ДЕТСКАЯ ПЛОЩАДКА', x: 470, y: 36 },
         { id: 'lm3', text: '🏢 КАРБЫШЕВА 22', x: 150, y: 425 },
         { id: 'lm4', text: '🏪 МАГАЗИН', x: 500, y: 415 },
         { id: 'lm5', text: '🏢 КАРБЫШЕВА 22А', x: 820, y: 425 }
     ];
-
     return { spots, landmarks, blockers: [], surveys: [] };
 }
 
@@ -43,7 +40,10 @@ function getData() {
     return data;
 }
 
-function saveData(data) { fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); }
+function saveData(data) { 
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); 
+}
+
 saveData(getData());
 
 app.get('/api/parking', (req, res) => res.json(getData()));
@@ -61,8 +61,9 @@ app.post('/api/admin/map-config', (req, res) => {
     res.json({ success: true });
 });
 
+// Занятие места 1-го ряда (с поддержкой leaveTime)
 app.post('/api/park/row1', (req, res) => {
-    let { spotId, carNumber, phone, apt } = req.body;
+    let { spotId, carNumber, phone, apt, leaveTime } = req.body;
     if (!carNumber) return res.status(400).json({ error: 'Номер обязателен' });
     const data = getData();
     const spot = data.spots.find(s => s.id === spotId);
@@ -71,11 +72,13 @@ app.post('/api/park/row1', (req, res) => {
             carNumber: carNumber.toUpperCase().trim(),
             phone: (phone || '').trim(),
             apt: (apt || '').trim(),
-            leaveTime: (leaveTime || '').trim(), // <-- добавить эту строчку
+            leaveTime: (leaveTime || '').trim(),
             parkedAt: new Date().toISOString()
         };
         saveData(data);
         res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'Место не найдено' });
     }
 });
 
@@ -84,19 +87,16 @@ app.post('/api/leave/row1', (req, res) => {
     const data = getData();
     const spot = data.spots.find(s => s.id === spotId);
     if (!spot || !spot.occupiedBy) return res.status(404).json({ error: 'Место свободно' });
-
     if (pin === ADMIN_PIN) {
         spot.occupiedBy = null;
         saveData(data);
         return res.json({ success: true });
     }
-
     const cleanStored = (spot.occupiedBy.phone || '').replace(/\D/g, '');
     const cleanEntered = (phoneDigits || '').replace(/\D/g, '');
     if (cleanStored.length >= 4 && !cleanStored.endsWith(cleanEntered)) {
         return res.status(403).json({ error: 'Неверные 4 цифры телефона!' });
     }
-
     spot.occupiedBy = null;
     saveData(data);
     res.json({ success: true });
@@ -122,19 +122,16 @@ app.post('/api/leave/row2', (req, res) => {
     const data = getData();
     const blocker = data.blockers.find(b => b.id === blockerId);
     if (!blocker) return res.json({ success: true });
-
     if (pin === ADMIN_PIN) {
         data.blockers = data.blockers.filter(b => b.id !== blockerId);
         saveData(data);
         return res.json({ success: true });
     }
-
     const cleanStored = (blocker.phone || '').replace(/\D/g, '');
     const cleanEntered = (phoneDigits || '').replace(/\D/g, '');
     if (cleanStored.length >= 4 && !cleanStored.endsWith(cleanEntered)) {
         return res.status(403).json({ error: 'Неверные 4 цифры телефона!' });
     }
-
     data.blockers = data.blockers.filter(b => b.id !== blockerId);
     saveData(data);
     res.json({ success: true });
