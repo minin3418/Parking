@@ -38,9 +38,8 @@ async function loadData() {
     }
 }
 
-function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAtStr) {
+function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAtStr, leaveTimeStr) {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
     if (isFree) {
         const stall = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         stall.setAttribute('x', -18); stall.setAttribute('y', -32);
@@ -99,7 +98,14 @@ function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAt
         textCar.textContent = carNumber || `№${spotId}`;
         g.appendChild(textCar);
 
-        if (parkedAtStr) {
+        if (leaveTimeStr) {
+            const textTime = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            textTime.setAttribute('y', 8); textTime.setAttribute('fill', '#81c784');
+            textTime.setAttribute('font-size', '6'); textTime.setAttribute('font-weight', 'bold');
+            textTime.setAttribute('text-anchor', 'middle'); textTime.setAttribute('dominant-baseline', 'middle');
+            textTime.textContent = leaveTimeStr.slice(0, 9);
+            g.appendChild(textTime);
+        } else if (parkedAtStr) {
             const textTime = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             textTime.setAttribute('y', 8); textTime.setAttribute('fill', '#ffeb3b');
             textTime.setAttribute('font-size', '6'); textTime.setAttribute('text-anchor', 'middle');
@@ -122,7 +128,6 @@ function render() {
     slotsLayer.innerHTML = '';
     blockersLayer.innerHTML = '';
     landmarksLayer.innerHTML = '';
-
     let occupied = 0;
 
     landmarks.forEach(lm => {
@@ -135,7 +140,6 @@ function render() {
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('class', `landmark-text ${isEditMode ? 'editable-landmark' : ''}`);
         text.textContent = lm.text;
-
         text.onclick = () => {
             if (!isEditMode) return;
             const newText = prompt(`Изменить надпись "${lm.text}":`, lm.text);
@@ -151,11 +155,9 @@ function render() {
         if (spot.occupiedBy) occupied++;
         const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
         const isSelected = r2Selected.includes(spot.id);
-
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('class', 'stall-node');
         g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${spot.angle || 0})`);
-
         g.onclick = () => {
             if (isRow2Mode) {
                 if (r2Selected.includes(spot.id)) {
@@ -169,9 +171,9 @@ function render() {
                 openSpotDetails(spot);
             }
         };
-
         const parkedAtStr = spot.occupiedBy ? spot.occupiedBy.parkedAt : null;
-        const carSvg = createCarSvg(!spot.occupiedBy, spot.occupiedBy ? spot.occupiedBy.carNumber : '', spot.id, isBlocked, isSelected, parkedAtStr);
+        const leaveTimeStr = spot.occupiedBy ? spot.occupiedBy.leaveTime : null;
+        const carSvg = createCarSvg(!spot.occupiedBy, spot.occupiedBy ? spot.occupiedBy.carNumber : '', spot.id, isBlocked, isSelected, parkedAtStr, leaveTimeStr);
         g.appendChild(carSvg);
         slotsLayer.appendChild(g);
     });
@@ -187,7 +189,7 @@ function render() {
             const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             bg.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
             bg.onclick = () => requestLeaveRow2(b.id);
-            const carSvg = createCarSvg(false, b.carNumber, '', false, false, null);
+            const carSvg = createCarSvg(false, b.carNumber, '', false, false, null, null);
             bg.appendChild(carSvg);
             blockersLayer.appendChild(bg);
         }
@@ -235,15 +237,12 @@ function startRow2Selection() {
     r2Selected = [];
     document.getElementById('btnStartRow2').style.display = 'none';
     document.getElementById('sheetRow2').style.display = 'block';
-
     document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
     document.getElementById('r2Phone').value = localStorage.getItem('my_phone') || '';
     document.getElementById('r2Time').value = '08:30 утра';
-
     const inst = document.getElementById('instructionText');
     inst.className = 'instruction-bar select-mode';
     inst.innerHTML = '👉 <b>НАЖМИТЕ НА КАРТЕ</b> на машины, которые вы перекрыли:';
-
     updateRow2SheetText();
     render();
 }
@@ -253,11 +252,9 @@ function cancelRow2Selection() {
     r2Selected = [];
     document.getElementById('btnStartRow2').style.display = 'block';
     document.getElementById('sheetRow2').style.display = 'none';
-
     const inst = document.getElementById('instructionText');
     inst.className = 'instruction-bar';
     inst.innerHTML = '👉 Листайте схему влево-вправо ⇄ Нажмите на машинку, чтобы занять.';
-
     render();
 }
 
@@ -276,10 +273,8 @@ async function submitRow2() {
     const phone = document.getElementById('r2Phone').value.trim();
     const leaveTime = document.getElementById('r2Time').value.trim();
     if (!carNumber || !phone) return alert('Укажите номер и телефон!');
-
     localStorage.setItem('my_car', carNumber);
     localStorage.setItem('my_phone', phone);
-
     await fetch('/api/park/row2', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -298,7 +293,7 @@ function openSpotDetails(spot) {
     const blocker = (parkingData.blockers || []).find(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
     let blockerHtml = blocker ? `
         <div style="background:#b71c1c; padding:10px; border-radius:6px; margin-bottom:12px;">
-            ⚠️ <b>ВАС ПОДПЕРЛИ В ПРОЕЗДЕ!</b><br>
+            ⚠️ <b>Выезд перекрыт машиной во 2-м ряду!</b><br>
             Авто: <b>${blocker.carNumber}</b> (до ${blocker.leaveTime})<br>
             <div style="margin-top:6px;">
                 <a href="tel:${blocker.phone}" class="action-btn" style="background:#4CAF50; color:#fff;">📞 Набрать</a>
@@ -312,6 +307,7 @@ function openSpotDetails(spot) {
             ${blockerHtml}
             <p style="margin:4px 0;">Занято: <b>${spot.occupiedBy.carNumber}</b></p>
             <p style="margin:4px 0; color:#aaa; font-size:13px;">Кв: ${spot.occupiedBy.apt || '—'} | Тел: ${spot.occupiedBy.phone || '—'}</p>
+            ${spot.occupiedBy.leaveTime ? `<p style="margin:4px 0; color:#81c784; font-size:13px;">🕑 Уедет в: <b>${spot.occupiedBy.leaveTime}</b></p>` : ''}
             <p style="margin:8px 0 12px 0; color:#ffeb3b; font-size:13px;">🕑 Время парковки: <b>${formatTime(spot.occupiedBy.parkedAt)}</b></p>
             <button onclick="requestLeaveRow1(${spot.id})" style="width:100%; padding:10px; background:#d32f2f; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; margin-top:8px;">
                 ${isAdmin ? '★ Освободить (Админ)' : 'Освободить место'}
@@ -324,6 +320,7 @@ function openSpotDetails(spot) {
             <input type="text" id="r1Car" placeholder="Номер авто (А123АА)" value="${localStorage.getItem('my_car') || ''}">
             <input type="text" id="r1Apt" placeholder="Номер квартиры" value="${localStorage.getItem('my_apt') || ''}">
             <input type="tel" id="r1Phone" placeholder="Телефон для связи" value="${localStorage.getItem('my_phone') || ''}">
+            <input type="text" id="r1Time" placeholder="Уеду в... (напр. 08:30 утра)" value="${localStorage.getItem('my_time') || ''}">
             <button onclick="occupyRow1(${spot.id})" style="width:100%; padding:10px; background:#2e7d32; color:#fff; border:none; border-radius:6px; font-weight:bold; margin-top:6px; cursor:pointer;">Занять место</button>
             <button onclick="closeModal('modalRow1')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:8px; cursor:pointer;">Закрыть</button>
         `;
@@ -335,16 +332,17 @@ async function occupyRow1(spotId) {
     const carNumber = document.getElementById('r1Car').value.trim().toUpperCase();
     const phone = document.getElementById('r1Phone').value.trim();
     const apt = document.getElementById('r1Apt').value.trim();
+    const leaveTime = document.getElementById('r1Time').value.trim();
     if (!carNumber) return alert('Укажите номер машины!');
-
     localStorage.setItem('my_car', carNumber);
     localStorage.setItem('my_phone', phone);
     localStorage.setItem('my_apt', apt);
+    if (leaveTime) localStorage.setItem('my_time', leaveTime);
 
     await fetch('/api/park/row1', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ spotId, carNumber, apt, phone })
+        body: JSON.stringify({ spotId, carNumber, apt, phone, leaveTime })
     });
     closeModal('modalRow1');
     loadData();
