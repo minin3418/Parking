@@ -303,7 +303,7 @@
             <button class="btn btn-cyan" onclick="addNewLandmark()">+ Объект</button>
             <button class="btn btn-amber" onclick="saveMapToServer()">💾 Сохранить схему</button>
         </div>
-        <p style="font-size:11px; color:#ffb300; margin-top:8px;">🖐 <b>Перетаскивайте</b> машинки и объекты прямо по схеме! Нажмите на объект для изменения угла или удаления.</p>
+        <p style="font-size:11px; color:#ffb300; margin-top:8px;">🖐 <b>Перетаскивайте</b> машинки и объекты прямо по схеме! Нажмите на место/объект для настройки номера, угла или удаления.</p>
     </div>
 
     <div class="hint-bar" id="instructionBar">
@@ -351,14 +351,14 @@
         </div>
     </div>
 
-    <!-- Spot Config Dialog (Admin) -->
+    <!-- Spot Config Dialog (Admin) с возможностью изменения номера места -->
     <div class="modal-overlay" id="editSpotModal">
         <div class="sheet">
             <h2 id="editSpotTitle" style="font-size:18px; margin-bottom:8px;">Настройка места</h2>
             <p style="font-size:12px; color:#81c784; margin-bottom:12px;">🖐 Перемещение: перетаскивайте машинку прямо по схеме!</p>
             
             <div class="input-group">
-                 <label>Номер парковочного места (№):</label>
+                <label>Номер парковочного места (№):</label>
                 <input type="number" id="spotIdInput" min="1" max="9999" placeholder="напр. 15">
             </div>
 
