@@ -118,7 +118,6 @@
             cursor: pointer;
         }
 
-        /* Admin editor bar */
         #adminEditorBar {
             display: none;
             background: #2b1723;
@@ -163,7 +162,6 @@
             color: var(--text-secondary);
         }
 
-        /* Map Container */
         .map-viewport {
             margin: 0 14px;
             background: #101316;
@@ -178,10 +176,8 @@
         svg#yardMap {
             width: 100%;
             height: 100%;
-            cursor: grab;
         }
 
-        /* Modal Sheet */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -305,7 +301,7 @@
             <button class="btn btn-cyan" onclick="addNewLandmark()">+ Объект</button>
             <button class="btn btn-amber" onclick="saveMapToServer()">💾 Сохранить схему</button>
         </div>
-        <p style="font-size:11px; color:#ffb300; margin-top:8px;">💡 Нажмите на любое место или объект на схеме, чтобы подвинуть, повернуть или удалить его.</p>
+        <p style="font-size:11px; color:#ffb300; margin-top:8px;">💡 Нажмите на любое место или объект на карте для настройки или удаления. Изменения сохраняются сразу.</p>
     </div>
 
     <div class="hint-bar" id="instructionBar">
@@ -315,19 +311,13 @@
     <!-- 2D Interactive Map Container -->
     <div class="map-viewport" id="viewport">
         <svg id="yardMap" viewBox="0 0 960 440">
-            <defs>
-                <pattern id="roadDash" width="24" height="4" patternUnits="userSpaceOnUse">
-                    <line x1="0" y1="2" x2="12" y2="2" stroke="#546e7a" stroke-width="2.5" />
-                </pattern>
-            </defs>
-
             <!-- Background & Roads -->
             <rect width="960" height="440" fill="#13171b" />
             <rect x="0" y="0" width="960" height="35" fill="#241c18" />
             <rect x="240" y="10" width="460" height="45" rx="6" fill="#1e2c22" stroke="#2e5939" stroke-width="1.5" />
             <text x="470" y="37" fill="#81c784" font-size="12" font-weight="bold" text-anchor="middle">ДЕТСКАЯ ПЛОЩАДКА</text>
 
-            <!-- Curving driveway -->
+            <!-- Driveway road -->
             <path d="M 0,200 Q 400,230 700,200 T 960,160" fill="none" stroke="#263238" stroke-width="110" stroke-linecap="round" />
             <path d="M 0,200 Q 400,230 700,200 T 960,160" fill="none" stroke="#455a64" stroke-width="2.5" stroke-dasharray="12,12" />
 
@@ -370,7 +360,7 @@
                 <input type="range" id="spotAngleInput" min="-180" max="180" value="0" oninput="onAngleChange(this.value)">
             </div>
             <div class="input-group">
-                <label>Позиция X / Y (перемещение кнопками):</label>
+                <label>Позиция X / Y (перемещение):</label>
                 <div style="display:flex; gap:6px; margin-bottom:6px;">
                     <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(-10, 0)">X -10</button>
                     <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(-2, 0)">X -2</button>
@@ -385,7 +375,7 @@
                 </div>
             </div>
             <div style="display:flex; gap:8px; margin-top:16px;">
-                <button class="btn btn-green" style="flex:1; justify-content:center;" onclick="saveSpotEdit()">Применить</button>
+                <button class="btn btn-green" style="flex:1; justify-content:center;" onclick="saveSpotEdit()">Сохранить</button>
                 <button class="btn btn-red" onclick="deleteCurrentSpot()">Удалить место</button>
             </div>
         </div>
@@ -417,21 +407,9 @@
 
     <!-- Bottom Navigation -->
     <div class="bottom-nav">
-        <button class="nav-btn active" onclick="switchTab('map')">
+        <button class="nav-btn active">
             <span style="font-size:18px;">🗺️</span>
             <span>Схема</span>
-        </button>
-        <button class="nav-btn" onclick="switchTab('spots')">
-            <span style="font-size:18px;">🚗</span>
-            <span>Места</span>
-        </button>
-        <button class="nav-btn" onclick="switchTab('blockers')">
-            <span style="font-size:18px;">⚠️</span>
-            <span>2-й ряд</span>
-        </button>
-        <button class="nav-btn" onclick="switchTab('survey')">
-            <span style="font-size:18px;">📊</span>
-            <span>Опрос</span>
         </button>
     </div>
 
