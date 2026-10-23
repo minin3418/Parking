@@ -1,483 +1,540 @@
-let parkingData = { spots: [], blockers: [], landmarks: [] };
+let currentData = { spots: [], blockers: [], landmarks: [], surveys: [] };
 let isAdmin = false;
-let adminPin = "";
-let isRow2Mode = false;
-let isEditMode = false;
-let r2Selected = [];
+let isEditMapMode = false;
+let isRow2SelectMode = false;
+let selectedBlockSpots = new Set();
+let editingSpotId = null;
+let editingLandmarkId = null;
 
-function closeModal(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-}
-
-function formatTime(iso) {
-    if (!iso) return 'Нет данных';
-    const d = new Date(iso);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (diffMin < 60) return `${h}:${m} (${diffMin} мин назад)`;
-    return `${h}:${m} (~${Math.floor(diffMin / 60)} ч назад)`;
-}
-
-function getShortTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
-}
-
+// Загрузка данных с сервера
 async function loadData() {
     try {
-        const res = await fetch('/api/parking');
-        parkingData = await res.json();
-        render();
-    } catch(e) {
-        console.error("Ошибка загрузки", e);
+        const res = await fetch('/api/data');
+        currentData = await res.json();
+        renderMap();
+        updateStats();
+    } catch (e) {
+        console.error('Ошибка загрузки данных:', e);
     }
 }
 
-function createCarSvg(isFree, carNumber, spotId, isBlocked, isSelected, parkedAtStr, leaveTimeStr) {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    if (isFree) {
-        const stall = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        stall.setAttribute('x', -18); stall.setAttribute('y', -32);
-        stall.setAttribute('width', 36); stall.setAttribute('height', 64);
-        stall.setAttribute('rx', 6);
-        stall.setAttribute('fill', 'rgba(46, 125, 50, 0.25)');
-        stall.setAttribute('stroke', isSelected ? '#ffeb3b' : (isBlocked ? '#ff9800' : '#4caf50'));
-        stall.setAttribute('stroke-width', isSelected ? '3' : '1.8');
-        if (isBlocked && !isSelected) stall.setAttribute('stroke-dasharray', '4,3');
-        g.appendChild(stall);
-
-        const textNum = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textNum.setAttribute('y', 4);
-        textNum.setAttribute('fill', '#81c784');
-        textNum.setAttribute('font-size', '13'); textNum.setAttribute('font-weight', 'bold');
-        textNum.setAttribute('text-anchor', 'middle'); textNum.setAttribute('dominant-baseline', 'middle');
-        textNum.textContent = `№${spotId}${isBlocked ? '⚠️' : ''}${isSelected ? ' ✅' : ''}`;
-        g.appendChild(textNum);
-    } else {
-        const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        body.setAttribute('x', -16); body.setAttribute('y', -30);
-        body.setAttribute('width', 32); body.setAttribute('height', 60);
-        body.setAttribute('rx', 7);
-        body.setAttribute('fill', isSelected ? '#e65100' : '#c62828');
-        body.setAttribute('stroke', isSelected ? '#ffeb3b' : (isBlocked ? '#ffeb3b' : '#ff7961'));
-        body.setAttribute('stroke-width', isSelected ? '3' : (isBlocked ? '2.5' : '1.5'));
-        if (isBlocked && !isSelected) body.setAttribute('stroke-dasharray', '4,3');
-        g.appendChild(body);
-
-        const m1 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        m1.setAttribute('x', -19); m1.setAttribute('y', -18); m1.setAttribute('width', 3); m1.setAttribute('height', 6); m1.setAttribute('fill', '#888');
-        const m2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        m2.setAttribute('x', 16); m2.setAttribute('y', -18); m2.setAttribute('width', 3); m2.setAttribute('height', 6); m2.setAttribute('fill', '#888');
-        g.appendChild(m1); g.appendChild(m2);
-
-        const frontGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        frontGlass.setAttribute('d', 'M -11 -12 L -9 -21 Q 0 -23 9 -21 L 11 -12 Z');
-        frontGlass.setAttribute('fill', '#111'); frontGlass.setAttribute('opacity', '0.8');
-        g.appendChild(frontGlass);
-
-        const rearGlass = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        rearGlass.setAttribute('d', 'M -11 15 L -9 22 Q 0 23 9 22 L 11 15 Z');
-        rearGlass.setAttribute('fill', '#111'); rearGlass.setAttribute('opacity', '0.8');
-        g.appendChild(rearGlass);
-
-        const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        l1.setAttribute('cx', -10); l1.setAttribute('cy', -28); l1.setAttribute('r', 2); l1.setAttribute('fill', '#fff9c4');
-        const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        l2.setAttribute('cx', 10); l2.setAttribute('cy', -28); l2.setAttribute('r', 2); l2.setAttribute('fill', '#fff9c4');
-        g.appendChild(l1); g.appendChild(l2);
-
-        const textCar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textCar.setAttribute('y', -2); textCar.setAttribute('fill', '#ffffff');
-        textCar.setAttribute('font-size', '8'); textCar.setAttribute('font-weight', 'bold');
-        textCar.setAttribute('text-anchor', 'middle'); textCar.setAttribute('dominant-baseline', 'middle');
-        textCar.textContent = carNumber || `№${spotId}`;
-        g.appendChild(textCar);
-
-        if (leaveTimeStr) {
-            const textTime = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            textTime.setAttribute('y', 8); textTime.setAttribute('fill', '#81c784');
-            textTime.setAttribute('font-size', '6'); textTime.setAttribute('font-weight', 'bold');
-            textTime.setAttribute('text-anchor', 'middle'); textTime.setAttribute('dominant-baseline', 'middle');
-            textTime.textContent = leaveTimeStr.slice(0, 9);
-            g.appendChild(textTime);
-        } else if (parkedAtStr) {
-            const textTime = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            textTime.setAttribute('y', 8); textTime.setAttribute('fill', '#ffeb3b');
-            textTime.setAttribute('font-size', '6'); textTime.setAttribute('text-anchor', 'middle');
-            textTime.setAttribute('dominant-baseline', 'middle');
-            textTime.textContent = getShortTime(parkedAtStr);
-            g.appendChild(textTime);
-        }
-    }
-    return g;
+function updateStats() {
+    const free = currentData.spots.filter(s => !s.occupiedBy).length;
+    document.getElementById('freeCount').textContent = `${free} из ${currentData.spots.length}`;
+    document.getElementById('blockersCount').textContent = `${currentData.blockers.length} авто`;
 }
 
-function render() {
-    const spots = parkingData.spots || [];
-    const blockers = parkingData.blockers || [];
-    const landmarks = parkingData.landmarks || [];
-    const slotsLayer = document.getElementById('slotsLayer');
+// Отрисовка карты в SVG
+function renderMap() {
+    const spotsLayer = document.getElementById('spotsLayer');
     const blockersLayer = document.getElementById('blockersLayer');
     const landmarksLayer = document.getElementById('landmarksLayer');
 
-    slotsLayer.innerHTML = '';
+    spotsLayer.innerHTML = '';
     blockersLayer.innerHTML = '';
     landmarksLayer.innerHTML = '';
-    let occupied = 0;
 
-    landmarks.forEach(lm => {
+    // 1. Отрисовка ориентиров / надписей
+    (currentData.landmarks || []).forEach(lm => {
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', lm.x);
         text.setAttribute('y', lm.y);
-        text.setAttribute('fill', '#aaa');
-        text.setAttribute('font-size', '11');
+        text.setAttribute('fill', isEditMapMode ? '#ffd54f' : '#90a4ae');
+        text.setAttribute('font-size', '12');
         text.setAttribute('font-weight', 'bold');
         text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('class', `landmark-text ${isEditMode ? 'editable-landmark' : ''}`);
+        text.style.cursor = isEditMapMode ? 'pointer' : 'default';
         text.textContent = lm.text;
-        text.onclick = () => {
-            if (!isEditMode) return;
-            const newText = prompt(`Изменить надпись "${lm.text}":`, lm.text);
-            if (newText && newText.trim()) {
-                lm.text = newText.trim();
-                render();
-            }
-        };
+        if (isEditMapMode) {
+            text.onclick = (e) => { e.stopPropagation(); openEditLandmark(lm.id); };
+        }
         landmarksLayer.appendChild(text);
     });
 
-    spots.forEach(spot => {
-        if (spot.occupiedBy) occupied++;
-        const isBlocked = blockers.some(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
-        const isSelected = r2Selected.includes(spot.id);
+    // 2. Отрисовка парковочных мест
+    currentData.spots.forEach(spot => {
+        const isFree = !spot.occupiedBy;
+        const isBlocked = currentData.blockers.some(b => b.blockedSpots.includes(spot.id));
+        const isSelectedRow2 = selectedBlockSpots.has(spot.id);
+
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', 'stall-node');
-        g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${spot.angle || 0})`);
-        g.onclick = () => {
-            if (isRow2Mode) {
-                if (r2Selected.includes(spot.id)) {
-                    r2Selected = r2Selected.filter(id => id !== spot.id);
-                } else {
-                    r2Selected.push(spot.id);
-                }
-                updateRow2SheetText();
-                render();
-            } else {
-                openSpotDetails(spot);
+        const angle = spot.angle || 0;
+        g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${angle})`);
+        g.style.cursor = 'pointer';
+
+        g.onclick = () => onSpotClicked(spot);
+
+        if (isFree) {
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', '-18');
+            rect.setAttribute('y', '-32');
+            rect.setAttribute('width', '36');
+            rect.setAttribute('height', '64');
+            rect.setAttribute('rx', '6');
+            rect.setAttribute('fill', isSelectedRow2 ? 'rgba(255, 179, 0, 0.4)' : 'rgba(76, 175, 80, 0.2)');
+            rect.setAttribute('stroke', isSelectedRow2 ? '#ffb300' : (isBlocked ? '#ffb300' : '#4caf50'));
+            rect.setAttribute('stroke-width', isSelectedRow2 ? '3' : '1.8');
+            if (isBlocked && !isSelectedRow2) rect.setAttribute('stroke-dasharray', '5,4');
+            g.appendChild(rect);
+
+            const num = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            num.setAttribute('x', '0');
+            num.setAttribute('y', '5');
+            num.setAttribute('text-anchor', 'middle');
+            num.setAttribute('fill', isSelectedRow2 ? '#fff59d' : '#81c784');
+            num.setAttribute('font-size', '12');
+            num.setAttribute('font-weight', 'bold');
+            num.textContent = `№${spot.id}${isBlocked ? '⚠️' : ''}${isSelectedRow2 ? '✓' : ''}`;
+            g.appendChild(num);
+        } else {
+            // Занятое авто
+            const car = spot.occupiedBy;
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', '-16');
+            rect.setAttribute('y', '-30');
+            rect.setAttribute('width', '32');
+            rect.setAttribute('height', '60');
+            rect.setAttribute('rx', '7');
+            rect.setAttribute('fill', isSelectedRow2 ? '#e65100' : '#c62828');
+            rect.setAttribute('stroke', isSelectedRow2 ? '#ffb300' : (isBlocked ? '#ffb300' : '#ef5350'));
+            rect.setAttribute('stroke-width', isSelectedRow2 || isBlocked ? '2.5' : '1.5');
+            g.appendChild(rect);
+
+            // Лобовое стекло
+            const glass = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            glass.setAttribute('x', '-10');
+            glass.setAttribute('y', '-20');
+            glass.setAttribute('width', '20');
+            glass.setAttribute('height', '10');
+            glass.setAttribute('rx', '2');
+            glass.setAttribute('fill', '#111');
+            g.appendChild(glass);
+
+            // Госномер
+            const plate = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            plate.setAttribute('x', '0');
+            plate.setAttribute('y', '2');
+            plate.setAttribute('text-anchor', 'middle');
+            plate.setAttribute('fill', '#ffffff');
+            plate.setAttribute('font-size', '7.5');
+            plate.setAttribute('font-weight', 'bold');
+            plate.textContent = car.carNumber || `№${spot.id}`;
+            g.appendChild(plate);
+
+            // Время отъезда или парковки
+            if (car.leaveTime) {
+                const leave = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                leave.setAttribute('x', '0');
+                leave.setAttribute('y', '14');
+                leave.setAttribute('text-anchor', 'middle');
+                leave.setAttribute('fill', '#81c784');
+                leave.setAttribute('font-size', '6.5');
+                leave.textContent = car.leaveTime.slice(0, 9);
+                g.appendChild(leave);
             }
-        };
-        const parkedAtStr = spot.occupiedBy ? spot.occupiedBy.parkedAt : null;
-        const leaveTimeStr = spot.occupiedBy ? spot.occupiedBy.leaveTime : null;
-        const carSvg = createCarSvg(!spot.occupiedBy, spot.occupiedBy ? spot.occupiedBy.carNumber : '', spot.id, isBlocked, isSelected, parkedAtStr, leaveTimeStr);
-        g.appendChild(carSvg);
-        slotsLayer.appendChild(g);
-    });
-
-    document.getElementById('statFree').innerText = `${spots.length - occupied} из ${spots.length}`;
-    document.getElementById('statBlocked').innerText = blockers.length;
-
-    blockers.forEach(b => {
-        const targetDefs = spots.filter(s => b.blockedSpots && b.blockedSpots.includes(s.id));
-        if (targetDefs.length > 0) {
-            const avgX = targetDefs.reduce((acc, cur) => acc + cur.x, 0) / targetDefs.length;
-            const avgY = 195;
-            const bg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            bg.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
-            bg.onclick = () => requestLeaveRow2(b.id);
-            const carSvg = createCarSvg(false, b.carNumber, '', false, false, null, null);
-            bg.appendChild(carSvg);
-            blockersLayer.appendChild(bg);
         }
+
+        spotsLayer.appendChild(g);
     });
 
-    const bList = document.getElementById('blockersList');
-    if (blockers.length === 0) {
-        bList.innerHTML = '<p style="color:#666; font-size:14px;">Второй ряд свободен</p>';
-    } else {
-        bList.innerHTML = blockers.map(b => `
-            <div class="block-card">
-                <b>🚗 ${b.carNumber}</b> (до ~${b.leaveTime || '?'})<br>
-                Подпёр места: <b>${(b.blockedSpots || []).join(', ')}</b><br>
-                <div>
-                    <a href="tel:${b.phone}" class="action-btn" style="background:#2e7d32; color:#fff;">📞 Набрать</a>
-                    <a href="sms:${b.phone}?body=${encodeURIComponent('Здравствуйте! Вы перекрыли выезд во дворе. Пожалуйста, выпустите мою машину.')}" class="action-btn" style="background:#0288d1; color:#fff;">✉️ SMS</a>
-                </div>
-                <button onclick="requestLeaveRow2(${b.id})" style="background:#333; border:1px solid #555; color:#ccc; padding:6px 10px; border-radius:4px; margin-top:8px; font-size:12px; cursor:pointer;">Освободить проезд</button>
-            </div>
-        `).join('');
+    // 3. Отрисовка авто во 2-м ряду
+    currentData.blockers.forEach(blocker => {
+        const targets = currentData.spots.filter(s => blocker.blockedSpots.includes(s.id));
+        const avgX = targets.length ? targets.reduce((a, b) => a + b.x, 0) / targets.length : 480;
+        const avgY = 195;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
+        g.style.cursor = 'pointer';
+        g.onclick = () => openBlockerDetails(blocker);
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', '-16');
+        rect.setAttribute('y', '-30');
+        rect.setAttribute('width', '32');
+        rect.setAttribute('height', '60');
+        rect.setAttribute('rx', '7');
+        rect.setAttribute('fill', '#d84315');
+        rect.setAttribute('stroke', '#ffb300');
+        rect.setAttribute('stroke-width', '2.5');
+        g.appendChild(rect);
+
+        const plate = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        plate.setAttribute('x', '0');
+        plate.setAttribute('y', '0');
+        plate.setAttribute('text-anchor', 'middle');
+        plate.setAttribute('fill', '#fff');
+        plate.setAttribute('font-size', '8');
+        plate.setAttribute('font-weight', 'bold');
+        plate.textContent = blocker.carNumber;
+        g.appendChild(plate);
+
+        if (blocker.leaveTime) {
+            const leave = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            leave.setAttribute('x', '0');
+            leave.setAttribute('y', '12');
+            leave.setAttribute('text-anchor', 'middle');
+            leave.setAttribute('fill', '#ffd54f');
+            leave.setAttribute('font-size', '6.5');
+            leave.textContent = blocker.leaveTime.slice(0, 8);
+            g.appendChild(leave);
+        }
+
+        blockersLayer.appendChild(g);
+    });
+}
+
+function onSpotClicked(spot) {
+    if (isEditMapMode) {
+        openEditSpot(spot.id);
+        return;
     }
+
+    if (isRow2SelectMode) {
+        if (selectedBlockSpots.has(spot.id)) {
+            selectedBlockSpots.delete(spot.id);
+        } else {
+            selectedBlockSpots.add(spot.id);
+        }
+        renderMap();
+        return;
+    }
+
+    openSpotModal(spot);
 }
 
-function toggleMapEdit() {
-    isEditMode = !isEditMode;
-    document.getElementById('btnSaveMap').style.display = isEditMode ? 'block' : 'none';
-    document.getElementById('editHint').style.display = isEditMode ? 'block' : 'none';
-    document.getElementById('btnMapEdit').innerText = isEditMode ? 'Отмена' : '🛠 Редактировать схему';
-    render();
+// Модальное окно места 1-го ряда
+function openSpotModal(spot) {
+    const body = document.getElementById('spotModalBody');
+    document.getElementById('modalSpotTitle').textContent = `Место №${spot.id} (${spot.occupiedBy ? 'Занято' : 'Свободно'})`;
+
+    const blocker = currentData.blockers.find(b => b.blockedSpots.includes(spot.id));
+    let blockerHtml = '';
+    if (blocker) {
+        blockerHtml = `
+            <div style="background:#331414; border:1px solid #ffb300; padding:12px; border-radius:10px; margin-bottom:12px;">
+                <strong style="color:#ffb300;">⚠️ ВЫЕЗД ПЕРЕКРЫТ!</strong>
+                <p style="margin:4px 0;">Авто во 2-м ряду: <b>${blocker.carNumber}</b> (до ${blocker.leaveTime || 'утра'})</p>
+                ${blocker.phone ? `<a href="tel:${blocker.phone}" class="btn btn-green" style="margin-top:6px; text-decoration:none;">📞 Позвонить ${blocker.phone}</a>` : ''}
+            </div>
+        `;
+    }
+
+    if (!spot.occupiedBy) {
+        body.innerHTML = `
+            ${blockerHtml}
+            <div class="input-group">
+                <label>Госномер авто (напр. А123АА):</label>
+                <input type="text" id="parkCarInput" placeholder="А123АА">
+            </div>
+            <div style="display:flex; gap:8px;">
+                <div class="input-group" style="flex:1;">
+                    <label>Квартира:</label>
+                    <input type="text" id="parkAptInput" placeholder="42">
+                </div>
+                <div class="input-group" style="flex:1.5;">
+                    <label>Телефон:</label>
+                    <input type="tel" id="parkPhoneInput" placeholder="+7 9...">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>Уеду в... (напр. до 19:00 или до утра):</label>
+                <input type="text" id="parkLeaveTimeInput" value="08:30 утра">
+            </div>
+            <button class="btn btn-green" style="width:100%; justify-content:center; padding:12px;" onclick="submitPark(${spot.id})">
+                Занять парковочное место
+            </button>
+        `;
+    } else {
+        const car = spot.occupiedBy;
+        body.innerHTML = `
+            ${blockerHtml}
+            <div class="number-plate">${car.carNumber}</div>
+            <p style="margin-bottom:6px;">Квартира: <b>${car.apt || '—'}</b></p>
+            <p style="margin-bottom:6px;">Телефон: <b>${car.phone || 'Не указан'}</b></p>
+            ${car.leaveTime ? `<p style="color:#81c784; margin-bottom:8px;">Планирует уехать: <b>${car.leaveTime}</b></p>` : ''}
+            
+            <div style="display:flex; gap:8px; margin:14px 0;">
+                ${car.phone ? `<a href="tel:${car.phone}" class="btn btn-green" style="flex:1; justify-content:center; text-decoration:none;">📞 Позвонить</a>` : ''}
+                ${car.phone ? `<a href="sms:${car.phone}?body=Здравствуйте! Освободите, пожалуйста, выезд на парковке." class="btn btn-cyan" style="flex:1; justify-content:center; text-decoration:none;">💬 SMS</a>` : ''}
+            </div>
+
+            <button class="btn btn-red" style="width:100%; justify-content:center; padding:10px;" onclick="submitLeave(${spot.id})">
+                Освободить место
+            </button>
+        `;
+    }
+
+    document.getElementById('spotModal').classList.add('active');
 }
 
-async function saveMapConfig() {
-    await fetch('/api/admin/map-config', {
+// Занять место
+async function submitPark(spotId) {
+    const carNumber = document.getElementById('parkCarInput').value;
+    const phone = document.getElementById('parkPhoneInput').value;
+    const apt = document.getElementById('parkAptInput').value;
+    const leaveTime = document.getElementById('parkLeaveTimeInput').value;
+
+    if (!carNumber) return alert('Введите номер авто');
+
+    const res = await fetch('/api/park', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: adminPin, landmarks: parkingData.landmarks, spots: parkingData.spots })
+        body: JSON.stringify({ spotId, carNumber, phone, apt, leaveTime })
     });
-    alert('Схема и надписи сохранены!');
-    toggleMapEdit();
+    const ans = await res.json();
+    if (ans.error) return alert(ans.error);
+
+    closeModal();
     loadData();
 }
 
-function startRow2Selection() {
-    isRow2Mode = true;
-    r2Selected = [];
-    document.getElementById('btnStartRow2').style.display = 'none';
-    document.getElementById('sheetRow2').style.display = 'block';
-    document.getElementById('r2Car').value = localStorage.getItem('my_car') || '';
-    document.getElementById('r2Phone').value = localStorage.getItem('my_phone') || '';
-    document.getElementById('r2Time').value = '08:30 утра';
-    const inst = document.getElementById('instructionText');
-    inst.className = 'instruction-bar select-mode';
-    inst.innerHTML = '👉 <b>НАЖМИТЕ НА КАРТЕ</b> на машины, которые вы перекрыли:';
-    updateRow2SheetText();
-    render();
-}
-
-function cancelRow2Selection() {
-    isRow2Mode = false;
-    r2Selected = [];
-    document.getElementById('btnStartRow2').style.display = 'block';
-    document.getElementById('sheetRow2').style.display = 'none';
-    const inst = document.getElementById('instructionText');
-    inst.className = 'instruction-bar';
-    inst.innerHTML = '👉 Листайте схему влево-вправо ⇄ Нажмите на машинку, чтобы занять.';
-    render();
-}
-
-function updateRow2SheetText() {
-    const textEl = document.getElementById('sheetSelectedSpots');
-    if (r2Selected.length === 0) {
-        textEl.innerText = 'Нажмите на карте';
+// Освободить место
+async function submitLeave(spotId) {
+    let digits = '';
+    let pin = '';
+    if (isAdmin) {
+        pin = prompt('Введите PIN администратора для освобождения:', '2200');
     } else {
-        textEl.innerText = '№' + r2Selected.sort((a,b)=>a-b).join(', №');
+        digits = prompt('Введите последние 4 цифры вашего номера телефона:');
     }
+
+    const res = await fetch('/api/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotId, lastDigits: digits, pin })
+    });
+    const ans = await res.json();
+    if (ans.error) return alert(ans.error);
+
+    closeModal();
+    loadData();
+}
+
+// Режим 2-го ряда
+function startRow2Mode() {
+    isRow2SelectMode = true;
+    selectedBlockSpots.clear();
+    document.getElementById('instructionBar').innerHTML = '👉 <b>НАЖМИТЕ НА КАРТЕ</b> на места/машины, которые вы перекрываете, затем нажмите «Подтвердить» ниже:';
+    
+    // Подмена нижней плашки
+    const modal = document.getElementById('spotModal');
+    const body = document.getElementById('spotModalBody');
+    document.getElementById('modalSpotTitle').textContent = 'Встать во 2-й ряд';
+    body.innerHTML = `
+        <div class="input-group">
+            <label>Ваш госномер авто:</label>
+            <input type="text" id="row2Car" placeholder="А123АА">
+        </div>
+        <div class="input-group">
+            <label>Телефон для связи (обязательно):</label>
+            <input type="tel" id="row2Phone" placeholder="+7 9...">
+        </div>
+        <div class="input-group">
+            <label>Уеду в... (напр. до 08:30 утра):</label>
+            <input type="text" id="row2Time" value="08:30 утра">
+        </div>
+        <button class="btn btn-amber" style="width:100%; justify-content:center; padding:12px;" onclick="submitRow2()">
+            Подтвердить постановку во 2-й ряд
+        </button>
+    `;
+    modal.classList.add('active');
 }
 
 async function submitRow2() {
-    if (r2Selected.length === 0) return alert('Нажмите на карте хотя бы на одну машину, которую перекрыли!');
-    const carNumber = document.getElementById('r2Car').value.trim().toUpperCase();
-    const phone = document.getElementById('r2Phone').value.trim();
-    const leaveTime = document.getElementById('r2Time').value.trim();
-    if (!carNumber || !phone) return alert('Укажите номер и телефон!');
-    localStorage.setItem('my_car', carNumber);
-    localStorage.setItem('my_phone', phone);
-    await fetch('/api/park/row2', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ carNumber, phone, leaveTime, blockedSpots: r2Selected })
-    });
-    cancelRow2Selection();
-    loadData();
-}
+    const carNumber = document.getElementById('row2Car').value;
+    const phone = document.getElementById('row2Phone').value;
+    const leaveTime = document.getElementById('row2Time').value;
 
-function openSpotDetails(spot) {
-    const modal = document.getElementById('modalRow1');
-    const title = document.getElementById('row1ModalTitle');
-    const actions = document.getElementById('spotActions');
-    title.innerText = `Место №${spot.id}`;
+    if (!carNumber || !phone) return alert('Укажите авто и телефон');
+    if (selectedBlockSpots.size === 0) return alert('Выберите на карте хотя бы одно место, которое перекрыли');
 
-    const blocker = (parkingData.blockers || []).find(b => b.blockedSpots && b.blockedSpots.includes(spot.id));
-    let blockerHtml = blocker ? `
-        <div style="background:#b71c1c; padding:10px; border-radius:6px; margin-bottom:12px;">
-            ⚠️ <b>Выезд перекрыт машиной во 2-м ряду!</b><br>
-            Авто: <b>${blocker.carNumber}</b> (до ${blocker.leaveTime})<br>
-            <div style="margin-top:6px;">
-                <a href="tel:${blocker.phone}" class="action-btn" style="background:#4CAF50; color:#fff;">📞 Набрать</a>
-                <a href="sms:${blocker.phone}?body=${encodeURIComponent('Здравствуйте! Вы перекрыли мою машину на месте №' + spot.id + '. Пожалуйста, выпустите!')}" class="action-btn" style="background:#00bcd4; color:#000;">✉️ Отправить SMS</a>
-            </div>
-        </div>
-    ` : '';
-
-    if (spot.occupiedBy) {
-        actions.innerHTML = `
-            ${blockerHtml}
-            <p style="margin:4px 0;">Занято: <b>${spot.occupiedBy.carNumber}</b></p>
-            <p style="margin:4px 0; color:#aaa; font-size:13px;">Кв: ${spot.occupiedBy.apt || '—'} | Тел: ${spot.occupiedBy.phone || '—'}</p>
-            ${spot.occupiedBy.leaveTime ? `<p style="margin:4px 0; color:#81c784; font-size:13px;">🕑 Уедет в: <b>${spot.occupiedBy.leaveTime}</b></p>` : ''}
-            <p style="margin:8px 0 12px 0; color:#ffeb3b; font-size:13px;">🕑 Время парковки: <b>${formatTime(spot.occupiedBy.parkedAt)}</b></p>
-            <button onclick="requestLeaveRow1(${spot.id})" style="width:100%; padding:10px; background:#d32f2f; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; margin-top:8px;">
-                ${isAdmin ? '★ Освободить (Админ)' : 'Освободить место'}
-            </button>
-            <button onclick="closeModal('modalRow1')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:8px; cursor:pointer;">Закрыть</button>
-        `;
-    } else {
-        actions.innerHTML = `
-            ${blockerHtml}
-            <input type="text" id="r1Car" placeholder="Номер авто (А123АА)" value="${localStorage.getItem('my_car') || ''}">
-            <input type="text" id="r1Apt" placeholder="Номер квартиры" value="${localStorage.getItem('my_apt') || ''}">
-            <input type="tel" id="r1Phone" placeholder="Телефон для связи" value="${localStorage.getItem('my_phone') || ''}">
-            <input type="text" id="r1Time" placeholder="Уеду в... (напр. 08:30 утра)" value="${localStorage.getItem('my_time') || ''}">
-            <button onclick="occupyRow1(${spot.id})" style="width:100%; padding:10px; background:#2e7d32; color:#fff; border:none; border-radius:6px; font-weight:bold; margin-top:6px; cursor:pointer;">Занять место</button>
-            <button onclick="closeModal('modalRow1')" style="width:100%; padding:10px; background:#444; color:#fff; border:none; border-radius:6px; margin-top:8px; cursor:pointer;">Закрыть</button>
-        `;
-    }
-    modal.style.display = 'flex';
-}
-
-async function occupyRow1(spotId) {
-    const carNumber = document.getElementById('r1Car').value.trim().toUpperCase();
-    const phone = document.getElementById('r1Phone').value.trim();
-    const apt = document.getElementById('r1Apt').value.trim();
-    const leaveTime = document.getElementById('r1Time').value.trim();
-    if (!carNumber) return alert('Укажите номер машины!');
-    localStorage.setItem('my_car', carNumber);
-    localStorage.setItem('my_phone', phone);
-    localStorage.setItem('my_apt', apt);
-    if (leaveTime) localStorage.setItem('my_time', leaveTime);
-
-    await fetch('/api/park/row1', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ spotId, carNumber, apt, phone, leaveTime })
-    });
-    closeModal('modalRow1');
-    loadData();
-}
-
-function requestLeaveRow1(spotId) {
-    closeModal('modalRow1');
-    if (isAdmin) return leaveRow1(spotId, '', adminPin);
-    document.getElementById('confirmDigits').value = '';
-    document.getElementById('confirmError').style.display = 'none';
-    document.getElementById('btnConfirmLeave').onclick = () => {
-        const digits = document.getElementById('confirmDigits').value.trim();
-        if (digits.length !== 4) {
-            document.getElementById('confirmError').innerText = 'Введите ровно 4 цифры!';
-            document.getElementById('confirmError').style.display = 'block';
-            return;
-        }
-        leaveRow1(spotId, digits, '');
-    };
-    document.getElementById('modalConfirmLeave').style.display = 'flex';
-}
-
-async function leaveRow1(spotId, phoneDigits, pin) {
-    const res = await fetch('/api/leave/row1', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ spotId, phoneDigits, pin })
-    });
-    const d = await res.json();
-    if (d.error) {
-        document.getElementById('confirmError').innerText = d.error;
-        document.getElementById('confirmError').style.display = 'block';
-    } else {
-        closeModal('modalConfirmLeave');
-        loadData();
-    }
-}
-
-function requestLeaveRow2(blockerId) {
-    if (isAdmin) return leaveRow2(blockerId, '', adminPin);
-    document.getElementById('confirmDigits').value = '';
-    document.getElementById('confirmError').style.display = 'none';
-    document.getElementById('btnConfirmLeave').onclick = () => {
-        const digits = document.getElementById('confirmDigits').value.trim();
-        if (digits.length !== 4) {
-            document.getElementById('confirmError').innerText = 'Введите ровно 4 цифры!';
-            document.getElementById('confirmError').style.display = 'block';
-            return;
-        }
-        leaveRow2(blockerId, digits, '');
-    };
-    document.getElementById('modalConfirmLeave').style.display = 'flex';
-}
-
-async function leaveRow2(blockerId, phoneDigits, pin) {
-    const res = await fetch('/api/leave/row2', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ blockerId, phoneDigits, pin })
-    });
-    const d = await res.json();
-    if (d.error) {
-        document.getElementById('confirmError').innerText = d.error;
-        document.getElementById('confirmError').style.display = 'block';
-    } else {
-        closeModal('modalConfirmLeave');
-        loadData();
-    }
-}
-
-async function toggleAdmin() {
-    if (isAdmin) {
-        isAdmin = false;
-        document.getElementById('roleBadge').innerText = 'Режим: Житель';
-        document.getElementById('roleBadge').style.background = '#333';
-        document.getElementById('adminPanel').style.display = 'none';
-        isEditMode = false;
-        render();
-        return;
-    }
-    const pin = prompt('Введите PIN-код:');
-    if (!pin) return;
-    const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ pin })
-    });
-    const d = await res.json();
-    if (d.success) {
-        isAdmin = true;
-        adminPin = pin;
-        document.getElementById('roleBadge').innerText = '★ Админ';
-        document.getElementById('roleBadge').style.background = '#4CAF50';
-        document.getElementById('adminPanel').style.display = 'block';
-        render();
-    } else {
-        alert('Неверный PIN!');
-    }
-}
-
-async function viewSurveyResults() {
-    const res = await fetch('/api/admin/surveys', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ pin: adminPin })
-    });
-    const list = await res.json();
-    const c = document.getElementById('surveyAnswersList');
-    if (!list || list.length === 0) {
-        c.innerHTML = '<p>Пока нет ответов.</p>';
-    } else {
-        c.innerHTML = list.map(item => `
-            <div style="border-bottom:1px solid #444; padding:6px 0;">
-                <b style="color:#ffeb3b;">${item.answer}</b><br>
-                ${item.comment ? `💬 <i>"${item.comment}"</i><br>` : ''}
-                <small style="color:#777;">${item.date}</small>
-            </div>
-        `).join('');
-    }
-    document.getElementById('modalSurveys').style.display = 'flex';
-}
-
-async function submitSurvey() {
-    const choice = document.querySelector('input[name="poll"]:checked');
-    if (!choice) return alert('Выберите вариант ответа!');
-    await fetch('/api/survey', {
+    const res = await fetch('/api/blocker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            answer: choice.value,
-            comment: document.getElementById('surveyComment').value.trim()
+            carNumber,
+            phone,
+            blockedSpots: Array.from(selectedBlockSpots),
+            leaveTime
         })
     });
-    document.getElementById('surveyForm').style.display = 'none';
-    document.getElementById('surveySuccess').style.display = 'block';
+    const ans = await res.json();
+    if (ans.error) return alert(ans.error);
+
+    isRow2SelectMode = false;
+    selectedBlockSpots.clear();
+    closeModal();
+    loadData();
 }
 
-window.onload = loadData;
+// ----------------- РЕДАКТОР КАРТЫ ДЛЯ АДМИНИСТРАТОРА -----------------
+
+function toggleAdmin() {
+    if (!isAdmin) {
+        const pin = prompt('Введите PIN администратора:', '2200');
+        if (pin === '2200') {
+            isAdmin = true;
+            document.getElementById('roleBadge').textContent = '★ Админ';
+            document.getElementById('roleBadge').classList.add('active');
+            document.getElementById('adminEditorBar').style.display = 'block';
+            isEditMapMode = true;
+            renderMap();
+        } else {
+            alert('Неверный PIN');
+        }
+    } else {
+        isAdmin = false;
+        isEditMapMode = false;
+        document.getElementById('roleBadge').textContent = 'Житель';
+        document.getElementById('roleBadge').classList.remove('active');
+        document.getElementById('adminEditorBar').style.display = 'none';
+        renderMap();
+    }
+}
+
+function closeAdminEdit() {
+    isEditMapMode = false;
+    document.getElementById('adminEditorBar').style.display = 'none';
+    renderMap();
+}
+
+// Добавить место
+function addNewSpot() {
+    const nextId = (currentData.spots.reduce((max, s) => Math.max(max, s.id), 0) || 0) + 1;
+    currentData.spots.push({
+        id: nextId,
+        x: 480,
+        y: 200,
+        angle: 0,
+        occupiedBy: null
+    });
+    renderMap();
+    openEditSpot(nextId);
+}
+
+// Редактировать место
+function openEditSpot(spotId) {
+    editingSpotId = spotId;
+    const spot = currentData.spots.find(s => s.id === spotId);
+    if (!spot) return;
+
+    document.getElementById('editSpotTitle').textContent = `Настройка места №${spot.id}`;
+    document.getElementById('spotAngleInput').value = spot.angle || 0;
+    document.getElementById('angleValue').textContent = spot.angle || 0;
+
+    document.getElementById('editSpotModal').classList.add('active');
+}
+
+function onAngleChange(val) {
+    document.getElementById('angleValue').textContent = val;
+    const spot = currentData.spots.find(s => s.id === editingSpotId);
+    if (spot) {
+        spot.angle = Number(val);
+        renderMap();
+    }
+}
+
+function adjustSpotPos(dx, dy) {
+    const spot = currentData.spots.find(s => s.id === editingSpotId);
+    if (spot) {
+        spot.x += dx;
+        spot.y += dy;
+        renderMap();
+    }
+}
+
+function saveSpotEdit() {
+    document.getElementById('editSpotModal').classList.remove('active');
+}
+
+function deleteCurrentSpot() {
+    if (confirm(`Удалить место №${editingSpotId}?`)) {
+        currentData.spots = currentData.spots.filter(s => s.id !== editingSpotId);
+        document.getElementById('editSpotModal').classList.remove('active');
+        renderMap();
+        updateStats();
+    }
+}
+
+// Добавить ориентир/объект
+function addNewLandmark() {
+    const text = prompt('Введите название объекта (напр. 🚧 Шлагбаум, 🏢 Корпус 3, 🗑 Мусорка):', '🚧 ШЛАГБАУМ');
+    if (!text) return;
+
+    currentData.landmarks.push({
+        id: 'lm_' + Date.now(),
+        text: text.trim(),
+        x: 480,
+        y: 220
+    });
+    renderMap();
+}
+
+// Редактировать ориентир
+function openEditLandmark(id) {
+    editingLandmarkId = id;
+    const lm = currentData.landmarks.find(l => l.id === id);
+    if (!lm) return;
+
+    document.getElementById('lmTextInput').value = lm.text;
+    document.getElementById('editLandmarkModal').classList.add('active');
+}
+
+function adjustLmPos(dx, dy) {
+    const lm = currentData.landmarks.find(l => l.id === editingLandmarkId);
+    if (lm) {
+        lm.x += dx;
+        lm.y += dy;
+        renderMap();
+    }
+}
+
+function saveLmEdit() {
+    const lm = currentData.landmarks.find(l => l.id === editingLandmarkId);
+    if (lm) {
+        lm.text = document.getElementById('lmTextInput').value.trim();
+        renderMap();
+    }
+    document.getElementById('editLandmarkModal').classList.remove('active');
+}
+
+function deleteCurrentLm() {
+    if (confirm('Удалить этот объект?')) {
+        currentData.landmarks = currentData.landmarks.filter(l => l.id !== editingLandmarkId);
+        document.getElementById('editLandmarkModal').classList.remove('active');
+        renderMap();
+    }
+}
+
+// Сохранить всю схему на сервере
+async function saveMapToServer() {
+    const pin = prompt('Введите PIN администратора для сохранения на сервере:', '2200');
+    if (!pin) return;
+
+    try {
+        const res = await fetch('/api/admin/map', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                pin,
+                landmarks: currentData.landmarks,
+                spots: currentData.spots
+            })
+        });
+        const ans = await res.json();
+        if (ans.error) return alert(ans.error);
+        alert('Схема двора успешно сохранена!');
+        loadData();
+    } catch (e) {
+        alert('Ошибка связи с сервером: ' + e.message);
+    }
+}
+
+function closeModal() {
+    document.getElementById('spotModal').classList.remove('active');
+}
+
+// Запуск
+loadData();
+setInterval(loadData, 10000); // авто-обновление каждые 10 секунд
