@@ -1,13 +1,22 @@
 let currentData = { spots: [], blockers: [], landmarks: [], surveys: [] };
 let isAdmin = false;
+let adminPin = localStorage.getItem('dvor_admin_pin') || '';
 let isEditMapMode = false;
 let isRow2SelectMode = false;
 let selectedBlockSpots = new Set();
 let editingSpotId = null;
 let editingLandmarkId = null;
 
+// Если ранее админ уже входил с PIN 3418 — восстанавливаем статус
+if (adminPin === '3418') {
+    isAdmin = true;
+}
+
 // Загрузка данных с сервера
 async function loadData() {
+    // ВАЖНО: Во время активного режима редактирования схемы не затираем изменения фоновым опросом!
+    if (isEditMapMode) return;
+
     try {
         const res = await fetch('/api/data');
         currentData = await res.json();
@@ -22,6 +31,30 @@ function updateStats() {
     const free = currentData.spots.filter(s => !s.occupiedBy).length;
     document.getElementById('freeCount').textContent = `${free} из ${currentData.spots.length}`;
     document.getElementById('blockersCount').textContent = `${currentData.blockers.length} авто`;
+}
+
+// Всплывающее уведомление об автосохранении
+function showToast(msg) {
+    let toast = document.getElementById('toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '80px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.background = '#2e7d32';
+        toast.style.color = '#fff';
+        toast.style.padding = '10px 18px';
+        toast.style.borderRadius = '8px';
+        toast.style.fontWeight = 'bold';
+        toast.style.zIndex = '999';
+        toast.style.boxShadow = '0 4px 14px rgba(0,0,0,0.5)';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 2500);
 }
 
 // Отрисовка карты в SVG
@@ -87,7 +120,6 @@ function renderMap() {
             num.textContent = `№${spot.id}${isBlocked ? '⚠️' : ''}${isSelectedRow2 ? '✓' : ''}`;
             g.appendChild(num);
         } else {
-            // Занятое авто
             const car = spot.occupiedBy;
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             rect.setAttribute('x', '-16');
@@ -100,7 +132,6 @@ function renderMap() {
             rect.setAttribute('stroke-width', isSelectedRow2 || isBlocked ? '2.5' : '1.5');
             g.appendChild(rect);
 
-            // Лобовое стекло
             const glass = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             glass.setAttribute('x', '-10');
             glass.setAttribute('y', '-20');
@@ -110,7 +141,6 @@ function renderMap() {
             glass.setAttribute('fill', '#111');
             g.appendChild(glass);
 
-            // Госномер
             const plate = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             plate.setAttribute('x', '0');
             plate.setAttribute('y', '2');
@@ -121,7 +151,6 @@ function renderMap() {
             plate.textContent = car.carNumber || `№${spot.id}`;
             g.appendChild(plate);
 
-            // Время отъезда или парковки
             if (car.leaveTime) {
                 const leave = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 leave.setAttribute('x', '0');
@@ -294,7 +323,7 @@ async function submitLeave(spotId) {
     let digits = '';
     let pin = '';
     if (isAdmin) {
-        pin = prompt('Введите PIN администратора для освобождения:', '2200');
+        pin = adminPin || '3418';
     } else {
         digits = prompt('Введите последние 4 цифры вашего номера телефона:');
     }
@@ -317,7 +346,6 @@ function startRow2Mode() {
     selectedBlockSpots.clear();
     document.getElementById('instructionBar').innerHTML = '👉 <b>НАЖМИТЕ НА КАРТЕ</b> на места/машины, которые вы перекрываете, затем нажмите «Подтвердить» ниже:';
     
-    // Подмена нижней плашки
     const modal = document.getElementById('spotModal');
     const body = document.getElementById('spotModalBody');
     document.getElementById('modalSpotTitle').textContent = 'Встать во 2-й ряд';
@@ -368,24 +396,28 @@ async function submitRow2() {
     loadData();
 }
 
-// ----------------- РЕДАКТОР КАРТЫ ДЛЯ АДМИНИСТРАТОРА -----------------
+// ----------------- РЕДАКТОР КАРТЫ ДЛЯ АДМИНИСТРАТОРА (PIN: 3418) -----------------
 
 function toggleAdmin() {
     if (!isAdmin) {
-        const pin = prompt('Введите PIN администратора:', '2200');
-        if (pin === '2200') {
+        const pin = prompt('Введите PIN администратора:', '3418');
+        if (pin === '3418') {
             isAdmin = true;
+            adminPin = '3418';
+            localStorage.setItem('dvor_admin_pin', '3418');
             document.getElementById('roleBadge').textContent = '★ Админ';
             document.getElementById('roleBadge').classList.add('active');
             document.getElementById('adminEditorBar').style.display = 'block';
             isEditMapMode = true;
             renderMap();
         } else {
-            alert('Неверный PIN');
+            alert('Неверный PIN администратора');
         }
     } else {
         isAdmin = false;
         isEditMapMode = false;
+        adminPin = '';
+        localStorage.removeItem('dvor_admin_pin');
         document.getElementById('roleBadge').textContent = 'Житель';
         document.getElementById('roleBadge').classList.remove('active');
         document.getElementById('adminEditorBar').style.display = 'none';
@@ -411,6 +443,7 @@ function addNewSpot() {
     });
     renderMap();
     openEditSpot(nextId);
+    saveMapToServer(true); // мгновенное сохранение
 }
 
 // Редактировать место
@@ -446,6 +479,7 @@ function adjustSpotPos(dx, dy) {
 
 function saveSpotEdit() {
     document.getElementById('editSpotModal').classList.remove('active');
+    saveMapToServer(true); // мгновенно сохраняем изменения на сервере
 }
 
 function deleteCurrentSpot() {
@@ -454,13 +488,14 @@ function deleteCurrentSpot() {
         document.getElementById('editSpotModal').classList.remove('active');
         renderMap();
         updateStats();
+        saveMapToServer(true); // мгновенно удаляем на сервере
     }
 }
 
 // Добавить ориентир/объект
 function addNewLandmark() {
     const text = prompt('Введите название объекта (напр. 🚧 Шлагбаум, 🏢 Корпус 3, 🗑 Мусорка):', '🚧 ШЛАГБАУМ');
-    if (!text) return;
+    if (!text || !text.trim()) return;
 
     currentData.landmarks.push({
         id: 'lm_' + Date.now(),
@@ -469,6 +504,7 @@ function addNewLandmark() {
         y: 220
     });
     renderMap();
+    saveMapToServer(true); // мгновенное сохранение
 }
 
 // Редактировать ориентир
@@ -497,37 +533,45 @@ function saveLmEdit() {
         renderMap();
     }
     document.getElementById('editLandmarkModal').classList.remove('active');
+    saveMapToServer(true); // мгновенное сохранение
 }
 
+// Удалить объект
 function deleteCurrentLm() {
-    if (confirm('Удалить этот объект?')) {
+    if (confirm('Удалить этот объект со схемы?')) {
         currentData.landmarks = currentData.landmarks.filter(l => l.id !== editingLandmarkId);
         document.getElementById('editLandmarkModal').classList.remove('active');
         renderMap();
+        saveMapToServer(true); // мгновенное удаление на сервере в data.json
     }
 }
 
-// Сохранить всю схему на сервере
-async function saveMapToServer() {
-    const pin = prompt('Введите PIN администратора для сохранения на сервере:', '2200');
-    if (!pin) return;
+// Отправка схемы на сервер (с PIN 3418)
+async function saveMapToServer(silent = false) {
+    const pin = adminPin || '3418';
 
     try {
         const res = await fetch('/api/admin/map', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                pin,
+                pin: pin,
                 landmarks: currentData.landmarks,
                 spots: currentData.spots
             })
         });
         const ans = await res.json();
-        if (ans.error) return alert(ans.error);
-        alert('Схема двора успешно сохранена!');
-        loadData();
+        if (ans.error) {
+            alert('Ошибка сохранения: ' + ans.error);
+            return;
+        }
+        showToast('✓ Схема сохранена на сервере');
+        if (!silent) {
+            alert('Схема двора успешно сохранена!');
+        }
     } catch (e) {
-        alert('Ошибка связи с сервером: ' + e.message);
+        console.error('Ошибка сохранения на сервере:', e);
+        if (!silent) alert('Ошибка связи с сервером: ' + e.message);
     }
 }
 
@@ -535,6 +579,13 @@ function closeModal() {
     document.getElementById('spotModal').classList.remove('active');
 }
 
-// Запуск
+// Инициализация при открытии страницы
+if (isAdmin) {
+    document.getElementById('roleBadge').textContent = '★ Админ';
+    document.getElementById('roleBadge').classList.add('active');
+    document.getElementById('adminEditorBar').style.display = 'block';
+    isEditMapMode = true;
+}
+
 loadData();
-setInterval(loadData, 10000); // авто-обновление каждые 10 секунд
+setInterval(loadData, 10000); // авто-обновление каждые 10 секунд (блокируется при редактировании)
