@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 8100;
 const DATA_FILE = path.join(__dirname, 'data.json');
 
-// Пароль администратора 3418
+// Пароль администратора
 const ADMIN_PIN = process.env.ADMIN_PIN || '3418';
 
 function isPinValid(pin) {
@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Раздача статики: сначала папка public (если есть), затем корень проекта
+// Раздача статики: папка public и корень проекта
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
@@ -60,7 +60,7 @@ function getInitialData() {
   const landmarks = [
     { id: 'barrier', text: '🚧 ШЛАГБАУМ', x: 45, y: 195, angle: 0 },
     { id: 'bldg22', text: 'д. 22', x: 140, y: 410, angle: 0 },
-    { id: 'shop', text: 'МАГАЗИН', x: 500, y: 410, angle: 0 },
+    { id: 'shop', text: '🏬 МАГАЗИН', x: 500, y: 410, angle: 0 },
     { id: 'bldg22a', text: 'д. 22А', x: 820, y: 410, angle: 0 }
   ];
 
@@ -267,7 +267,7 @@ app.post('/api/blocker/leave', (req, res) => {
   res.json({ success: true });
 });
 
-// 6. Проверка PIN администратора (3418)
+// 6. Проверка PIN администратора
 app.post('/api/admin/verify', (req, res) => {
   const { pin } = req.body;
   if (isPinValid(pin)) {
@@ -279,7 +279,7 @@ app.post('/api/admin/verify', (req, res) => {
 
 // 7. Сохранение схемы двора (места, ряды, углы, надписи, удаление объектов)
 app.post('/api/admin/map', (req, res) => {
-  const { pin, landmarks, spots } = req.body;
+  const { pin, landmarks, spots, blockers } = req.body;
   if (!isPinValid(pin)) {
     return res.status(401).json({ error: 'Неверный PIN администратора' });
   }
@@ -290,17 +290,23 @@ app.post('/api/admin/map', (req, res) => {
     const oldSpotMap = new Map();
     (data.spots || []).forEach(s => oldSpotMap.set(Number(s.id), s.occupiedBy));
 
-    data.spots = spots.map(s => ({
-      id: Number(s.id),
-      x: Number(s.x),
-      y: Number(s.y),
-      angle: Number(s.angle || 0),
-      occupiedBy: oldSpotMap.has(Number(s.id)) ? oldSpotMap.get(Number(s.id)) : (s.occupiedBy || null)
-    }));
+    data.spots = spots.map(s => {
+      const numId = Number(s.id);
+      return {
+        id: numId,
+        x: Number(s.x),
+        y: Number(s.y),
+        angle: Number(s.angle || 0),
+        occupiedBy: s.occupiedBy !== undefined ? s.occupiedBy : (oldSpotMap.get(numId) || null)
+      };
+    });
+  }
+
+  if (Array.isArray(blockers)) {
+    data.blockers = blockers;
   }
 
   if (Array.isArray(landmarks)) {
-    // Полная перезапись ориентиров: удалённые объекты удаляются из базы, сохраняется угол
     data.landmarks = landmarks.map(lm => ({
       id: String(lm.id || ('lm_' + Date.now())),
       text: String(lm.text || '').trim(),
@@ -311,21 +317,18 @@ app.post('/api/admin/map', (req, res) => {
   }
 
   saveData(data);
-  console.log(`[Admin 3418] Схема сохранена: мест=${data.spots.length}, объектов=${data.landmarks.length}`);
+  console.log(`[Admin] Схема сохранена: мест=${data.spots.length}, объектов=${data.landmarks.length}`);
   res.json({ success: true, message: 'Схема двора успешно обновлена!' });
 });
 
 // 8. Голосование в опросе
 app.post('/api/survey/vote', (req, res) => {
-  const { surveyId, answer } = req.body;
+  const { answer } = req.body;
   const data = getData();
   if (!data.surveys || !data.surveys.length) {
     return res.status(404).json({ error: 'Опрос не найден' });
   }
-  const sId = Number(surveyId);
-  const survey = surveyId !== undefined
-    ? data.surveys.find(s => s.id === sId || s.id === surveyId) || data.surveys[0]
-    : data.surveys[0];
+  const survey = data.surveys[0];
   if (survey.votes[answer] !== undefined) {
     survey.votes[answer] += 1;
   } else {
@@ -345,5 +348,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Dvor-Parking server running on port ${PORT} (Admin PIN: 3418)`);
+  console.log(`Dvor-Parking server running on port ${PORT}`);
 });
