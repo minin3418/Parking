@@ -171,6 +171,7 @@
             overflow: hidden;
             touch-action: none;
             height: 380px;
+            user-select: none;
         }
 
         svg#yardMap {
@@ -301,7 +302,7 @@
             <button class="btn btn-cyan" onclick="addNewLandmark()">+ Объект</button>
             <button class="btn btn-amber" onclick="saveMapToServer()">💾 Сохранить схему</button>
         </div>
-        <p style="font-size:11px; color:#ffb300; margin-top:8px;">💡 Нажмите на любое место или объект на карте для настройки или удаления. Изменения сохраняются сразу.</p>
+        <p style="font-size:11px; color:#ffb300; margin-top:8px;">🖐 <b>Перетаскивайте</b> машинки и объекты прямо по схеме! Нажмите на объект для угла ориентации или удаления.</p>
     </div>
 
     <div class="hint-bar" id="instructionBar">
@@ -351,29 +352,31 @@
         </div>
     </div>
 
-    <!-- Spot Config / Move Dialog (Admin) -->
+    <!-- Spot Config Dialog (Admin) -->
     <div class="modal-overlay" id="editSpotModal">
         <div class="sheet">
-            <h2 id="editSpotTitle" style="font-size:18px; margin-bottom:12px;">Настройка места</h2>
+            <h2 id="editSpotTitle" style="font-size:18px; margin-bottom:8px;">Настройка места</h2>
+            <p style="font-size:12px; color:#81c784; margin-bottom:12px;">🖐 Перемещение: перетаскивайте машинку прямо по схеме!</p>
+            
             <div class="input-group">
-                <label>Угол ориентации (градусы): <span id="angleValue">0</span>°</label>
-                <input type="range" id="spotAngleInput" min="-180" max="180" value="0" oninput="onAngleChange(this.value)">
-            </div>
-            <div class="input-group">
-                <label>Позиция X / Y (перемещение):</label>
-                <div style="display:flex; gap:6px; margin-bottom:6px;">
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(-10, 0)">X -10</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(-2, 0)">X -2</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(2, 0)">X +2</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(10, 0)">X +10</button>
+                <label>Угол ориентации (градусы):</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="number" id="spotAngleNumInput" min="-180" max="180" value="0" style="width:110px;" oninput="onAngleNumInput(this.value)">
+                    <span style="font-size:13px; color:var(--text-secondary);">градусов (-180° .. 180°)</span>
                 </div>
-                <div style="display:flex; gap:6px;">
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(0, -10)">Y -10</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(0, -2)">Y -2</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(0, 2)">Y +2</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustSpotPos(0, 10)">Y +10</button>
+                <input type="range" id="spotAngleInput" min="-180" max="180" value="0" style="margin-top:10px;" oninput="onAngleSliderChange(this.value)">
+                
+                <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(0)">0°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(-18)">-18° (Ряд 1)</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(22)">22° (Ряд 2)</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(90)">90°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(-90)">-90°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(45)">45°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setAnglePreset(180)">180°</button>
                 </div>
             </div>
+
             <div style="display:flex; gap:8px; margin-top:16px;">
                 <button class="btn btn-green" style="flex:1; justify-content:center;" onclick="saveSpotEdit()">Сохранить</button>
                 <button class="btn btn-red" onclick="deleteCurrentSpot()">Удалить место</button>
@@ -384,19 +387,11 @@
     <!-- Landmark Edit Dialog (Admin) -->
     <div class="modal-overlay" id="editLandmarkModal">
         <div class="sheet">
-            <h2 style="font-size:18px; margin-bottom:12px;">Редактировать объект</h2>
+            <h2 style="font-size:18px; margin-bottom:8px;">Редактировать объект</h2>
+            <p style="font-size:12px; color:#00bcd4; margin-bottom:12px;">🖐 Перемещение: перетаскивайте объект пальцем/мышкой по схеме!</p>
             <div class="input-group">
                 <label>Текст объекта / ориентира:</label>
                 <input type="text" id="lmTextInput" placeholder="напр. 🚧 Шлагбаум">
-            </div>
-            <div class="input-group">
-                <label>Сдвиг позиции X / Y:</label>
-                <div style="display:flex; gap:6px; margin-bottom:6px;">
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustLmPos(-10, 0)">X -10</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustLmPos(10, 0)">X +10</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustLmPos(0, -10)">Y -10</button>
-                    <button class="btn btn-outline" style="flex:1;" onclick="adjustLmPos(0, 10)">Y +10</button>
-                </div>
             </div>
             <div style="display:flex; gap:8px; margin-top:16px;">
                 <button class="btn btn-cyan" style="flex:1; justify-content:center;" onclick="saveLmEdit()">Сохранить</button>
