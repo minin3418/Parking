@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Раздача статики: папка public и корень проекта
+// Раздача статики: сначала папка public (если есть), затем корень проекта
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
@@ -60,13 +60,14 @@ function getInitialData() {
   const landmarks = [
     { id: 'barrier', text: '🚧 ШЛАГБАУМ', x: 45, y: 195, angle: 0 },
     { id: 'bldg22', text: 'д. 22', x: 140, y: 410, angle: 0 },
-    { id: 'shop', text: '🏬 МАГАЗИН', x: 500, y: 410, angle: 0 },
+    { id: 'shop', text: 'МАГАЗИН', x: 500, y: 410, angle: 0 },
     { id: 'bldg22a', text: 'д. 22А', x: 820, y: 410, angle: 0 }
   ];
 
+  // id обязательно число (Long) для совместимости с Android-приложением
   const surveys = [
     {
-      id: 'barrier_survey',
+      id: 1,
       title: 'Установка нового шлагбаума со стороны сквера',
       options: ['За установку', 'Против', 'Воздерживаюсь'],
       votes: { 'За установку': 14, 'Против': 3, 'Воздерживаюсь': 1 }
@@ -93,7 +94,28 @@ function getData() {
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
 
-    // Гарантируем наличие угла angle у каждого объекта
+    // Автоматическая миграция: преобразуем строковые id опросов в числа (Long)
+    let surveysChanged = false;
+    data.surveys = data.surveys.map((sv, idx) => {
+      let numId = typeof sv.id === 'number' ? sv.id : parseInt(sv.id, 10);
+      if (isNaN(numId)) {
+        numId = idx + 1;
+        surveysChanged = true;
+      }
+      if (sv.id !== numId) {
+        surveysChanged = true;
+      }
+      return {
+        ...sv,
+        id: numId
+      };
+    });
+
+    if (surveysChanged) {
+      saveData(data);
+    }
+
+    // Гарантируем наличие угла у каждого объекта/ориентира
     data.landmarks = data.landmarks.map(lm => ({
       id: String(lm.id),
       text: String(lm.text || ''),
@@ -118,7 +140,7 @@ function saveData(data) {
   }
 }
 
-// 1. Получить актуальные данные схемы (с алиасами для приложений)
+// 1. Получить актуальные данные схемы (с алиасами для приложений и разного формата URL)
 const DATA_ROUTES = [
   '/api/data',
   '/data',
@@ -255,7 +277,7 @@ app.post('/api/admin/verify', (req, res) => {
   }
 });
 
-// 7. Сохранение схемы двора (с поддержкой углов ориентации объектов)
+// 7. Сохранение схемы двора (места, ряды, углы, надписи, удаление объектов)
 app.post('/api/admin/map', (req, res) => {
   const { pin, landmarks, spots } = req.body;
   if (!isPinValid(pin)) {
@@ -278,6 +300,7 @@ app.post('/api/admin/map', (req, res) => {
   }
 
   if (Array.isArray(landmarks)) {
+    // Полная перезапись ориентиров: удалённые объекты удаляются из базы, сохраняется угол
     data.landmarks = landmarks.map(lm => ({
       id: String(lm.id || ('lm_' + Date.now())),
       text: String(lm.text || '').trim(),
@@ -294,12 +317,15 @@ app.post('/api/admin/map', (req, res) => {
 
 // 8. Голосование в опросе
 app.post('/api/survey/vote', (req, res) => {
-  const { answer } = req.body;
+  const { surveyId, answer } = req.body;
   const data = getData();
   if (!data.surveys || !data.surveys.length) {
     return res.status(404).json({ error: 'Опрос не найден' });
   }
-  const survey = data.surveys[0];
+  const sId = Number(surveyId);
+  const survey = surveyId !== undefined
+    ? data.surveys.find(s => s.id === sId || s.id === surveyId) || data.surveys[0]
+    : data.surveys[0];
   if (survey.votes[answer] !== undefined) {
     survey.votes[answer] += 1;
   } else {
