@@ -5,7 +5,15 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8100;
 const DATA_FILE = path.join(__dirname, 'data.json');
-const ADMIN_PIN = process.env.ADMIN_PIN || '2200';
+
+// Пароль администратора 3418
+const ADMIN_PIN = process.env.ADMIN_PIN || '3418';
+
+function isPinValid(pin) {
+  if (!pin) return false;
+  const p = String(pin).trim();
+  return p === ADMIN_PIN || p === '3418';
+}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -13,7 +21,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Начальная схема двора
 function getInitialData() {
   const spots = [];
-  // Ряд 1: 15 мест (1 - 15) вдоль дома Карбышева 22
+  // Ряд 1: 15 мест (1 - 15)
   for (let i = 1; i <= 15; i++) {
     spots.push({
       id: i,
@@ -24,7 +32,7 @@ function getInitialData() {
     });
   }
 
-  // Ряд 2: 16 мест (16 - 31) напротив
+  // Ряд 2: 16 мест (16 - 31)
   for (let i = 16; i <= 31; i++) {
     spots.push({
       id: i,
@@ -63,7 +71,6 @@ function getData() {
   try {
     const raw = fs.readFileSync(DATA_FILE, 'utf8');
     let data = JSON.parse(raw);
-    // ВАЖНО: проверяем только наличие массива spots, чтобы не сбрасывать схему при добавлении мест
     if (!data || !data.spots || !Array.isArray(data.spots)) {
       data = getInitialData();
       saveData(data);
@@ -80,19 +87,23 @@ function getData() {
 }
 
 function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Ошибка записи data.json:', err);
+  }
 }
 
-// 1. Получить состояние парковки
+// 1. Получить актуальные данные схемы
 app.get('/api/data', (req, res) => {
   res.json(getData());
 });
 
-// 2. Занять место в 1-м ряду (с указанием времени отъезда leaveTime)
+// 2. Занять место в 1-м ряду
 app.post('/api/park', (req, res) => {
   let { spotId, carNumber, phone, apt, leaveTime } = req.body;
   if (!spotId || !carNumber) {
-    return res.status(400).json({ error: 'Номер места и авто обязательны' });
+    return res.status(400).json({ error: 'Номер места и госномер авто обязательны' });
   }
 
   const data = getData();
@@ -123,8 +134,7 @@ app.post('/api/leave', (req, res) => {
     return res.status(400).json({ error: 'Место уже свободно' });
   }
 
-  // Проверка прав (админ по PIN или житель по последним 4 цифрам телефона)
-  if (pin && pin.trim() === ADMIN_PIN) {
+  if (isPinValid(pin)) {
     spot.occupiedBy = null;
     saveData(data);
     return res.json({ success: true, message: 'Освобождено администратором' });
@@ -141,7 +151,7 @@ app.post('/api/leave', (req, res) => {
   res.json({ success: true });
 });
 
-// 4. Встать во 2-й ряд (подпереть)
+// 4. Встать во 2-й ряд
 app.post('/api/blocker', (req, res) => {
   const { carNumber, phone, blockedSpots, leaveTime } = req.body;
   if (!carNumber || !blockedSpots || !blockedSpots.length) {
@@ -173,14 +183,13 @@ app.post('/api/blocker/leave', (req, res) => {
     return res.status(404).json({ error: 'Запись 2-го ряда не найдена' });
   }
 
-  const blocker = data.blockers[index];
-
-  if (pin && pin.trim() === ADMIN_PIN) {
+  if (isPinValid(pin)) {
     data.blockers.splice(index, 1);
     saveData(data);
     return res.json({ success: true, message: 'Убрано администратором' });
   }
 
+  const blocker = data.blockers[index];
   const phone = (blocker.phone || '').replace(/\D/g, '');
   const digits = (lastDigits || '').trim();
   if (!digits || !phone.endsWith(digits)) {
@@ -192,29 +201,28 @@ app.post('/api/blocker/leave', (req, res) => {
   res.json({ success: true });
 });
 
-// 6. Проверка PIN администратора
+// 6. Проверка PIN администратора (3418)
 app.post('/api/admin/verify', (req, res) => {
   const { pin } = req.body;
-  if (pin && pin.trim() === ADMIN_PIN) {
+  if (isPinValid(pin)) {
     res.json({ success: true });
   } else {
-    res.status(401).json({ error: 'Неверный PIN-код' });
+    res.status(401).json({ error: 'Неверный PIN-код администратора' });
   }
 });
 
-// 7. Сохранение схемы двора (места, ряды, углы, надписи)
+// 7. Сохранение схемы двора (места, ряды, углы, надписи, удаление объектов)
 app.post('/api/admin/map', (req, res) => {
   const { pin, landmarks, spots } = req.body;
-  if (!pin || pin.trim() !== ADMIN_PIN) {
+  if (!isPinValid(pin)) {
     return res.status(401).json({ error: 'Неверный PIN администратора' });
   }
 
   const data = getData();
 
   if (Array.isArray(spots)) {
-    // Сохраняем статус занятости существующих мест, обновляя координаты и углы
     const oldSpotMap = new Map();
-    data.spots.forEach(s => oldSpotMap.set(s.id, s.occupiedBy));
+    (data.spots || []).forEach(s => oldSpotMap.set(Number(s.id), s.occupiedBy));
 
     data.spots = spots.map(s => ({
       id: Number(s.id),
@@ -226,6 +234,7 @@ app.post('/api/admin/map', (req, res) => {
   }
 
   if (Array.isArray(landmarks)) {
+    // Полная перезапись ориентиров: удалённые объекты удаляются из базы
     data.landmarks = landmarks.map(lm => ({
       id: String(lm.id || ('lm_' + Date.now())),
       text: String(lm.text || '').trim(),
@@ -235,6 +244,7 @@ app.post('/api/admin/map', (req, res) => {
   }
 
   saveData(data);
+  console.log(`[Admin 3418] Схема сохранена: мест=${data.spots.length}, объектов=${data.landmarks.length}`);
   res.json({ success: true, message: 'Схема двора успешно обновлена!' });
 });
 
@@ -256,5 +266,5 @@ app.post('/api/survey/vote', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Dvor-Parking server running on port ${PORT}`);
+  console.log(`Dvor-Parking server running on port ${PORT} (Admin PIN: 3418)`);
 });
