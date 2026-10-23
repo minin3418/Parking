@@ -9,8 +9,8 @@ let editingLandmarkId = null;
 
 let draggingItem = null; // { type: 'spot' | 'landmark', id, startMouseX, startMouseY, origX, origY, hasMoved }
 
-// Если ранее админ уже входил с PIN 3418 — восстанавливаем
-if (adminPin === '3418') {
+// Если ранее админ уже авторизовался — восстанавливаем сессию
+if (adminPin) {
     isAdmin = true;
 }
 
@@ -470,7 +470,7 @@ async function submitLeave(spotId) {
     let digits = '';
     let pin = '';
     if (isAdmin) {
-        pin = adminPin || '3418';
+        pin = adminPin;
     } else {
         digits = prompt('Введите последние 4 цифры вашего номера телефона:');
         if (digits === null) return;
@@ -626,7 +626,7 @@ async function submitLeaveBlocker(blockerId) {
     let digits = '';
     let pin = '';
     if (isAdmin) {
-        pin = adminPin || '3418';
+        pin = adminPin;
     } else {
         digits = prompt('Введите последние 4 цифры вашего номера телефона:');
         if (digits === null) return;
@@ -649,22 +649,35 @@ async function submitLeaveBlocker(blockerId) {
     }
 }
 
-// ----------------- РЕДАКТОР СХЕМЫ ДЛЯ АДМИНИСТРАТОРА (PIN: 3418) -----------------
+// ----------------- РЕДАКТОР СХЕМЫ ДЛЯ АДМИНИСТРАТОРА -----------------
 
-function toggleAdmin() {
+async function toggleAdmin() {
     if (!isAdmin) {
-        const pin = prompt('Введите PIN администратора:', '3418');
-        if (pin === '3418') {
-            isAdmin = true;
-            adminPin = '3418';
-            localStorage.setItem('dvor_admin_pin', '3418');
-            document.getElementById('roleBadge').textContent = '★ Админ';
-            document.getElementById('roleBadge').classList.add('active');
-            document.getElementById('adminEditorBar').style.display = 'block';
-            isEditMapMode = true;
-            renderMap();
-        } else {
-            alert('Неверный PIN администратора');
+        const pin = prompt('Введите PIN администратора:');
+        if (!pin || !pin.trim()) return;
+
+        try {
+            const res = await fetch('/api/admin/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: pin.trim() })
+            });
+            const ans = await res.json();
+            if (ans.success) {
+                isAdmin = true;
+                adminPin = pin.trim();
+                localStorage.setItem('dvor_admin_pin', adminPin);
+                document.getElementById('roleBadge').textContent = '★ Админ';
+                document.getElementById('roleBadge').classList.add('active');
+                document.getElementById('adminEditorBar').style.display = 'block';
+                isEditMapMode = true;
+                renderMap();
+                showToast('Вход в режим администратора выполнен');
+            } else {
+                alert(ans.error || 'Неверный PIN администратора');
+            }
+        } catch (e) {
+            alert('Ошибка связи с сервером: ' + e.message);
         }
     } else {
         isAdmin = false;
@@ -675,6 +688,7 @@ function toggleAdmin() {
         document.getElementById('roleBadge').classList.remove('active');
         document.getElementById('adminEditorBar').style.display = 'none';
         renderMap();
+        showToast('Выход из режима администратора');
     }
 }
 
@@ -699,13 +713,16 @@ function addNewSpot() {
     saveMapToServer(true);
 }
 
-// Открыть настройку места (угол и удаление)
+// Открыть настройку места (номер, угол и удаление)
 function openEditSpot(spotId) {
     editingSpotId = spotId;
     const spot = (currentData.spots || []).find(s => s.id === spotId);
     if (!spot) return;
 
     document.getElementById('editSpotTitle').textContent = `Настройка места №${spot.id}`;
+    const idInput = document.getElementById('spotIdInput');
+    if (idInput) idInput.value = spot.id;
+
     const angle = spot.angle || 0;
     document.getElementById('spotAngleInput').value = angle;
     document.getElementById('spotAngleNumInput').value = angle;
@@ -745,14 +762,64 @@ function setAnglePreset(deg) {
     }
 }
 
+// Сохранение настроек места (включая смену номера места)
 function saveSpotEdit() {
+    const spot = (currentData.spots || []).find(s => s.id === editingSpotId);
+    if (!spot) return;
+
+    const idInput = document.getElementById('spotIdInput');
+    if (idInput) {
+        const newId = parseInt(idInput.value, 10);
+        if (isNaN(newId) || newId <= 0) {
+            alert('Пожалуйста, введите корректный номер места (положительное число)');
+            return;
+        }
+
+        if (newId !== editingSpotId) {
+            const exists = (currentData.spots || []).some(s => s.id === newId);
+            if (exists) {
+                alert(`Место с номером №${newId} уже существует! Выберите другой номер.`);
+                return;
+            }
+
+            const oldId = spot.id;
+            spot.id = newId;
+
+            // Обновляем связи блокировок во 2-м ряду
+            (currentData.blockers || []).forEach(b => {
+                if (Array.isArray(b.blockedSpots)) {
+                    b.blockedSpots = b.blockedSpots.map(id => (id === oldId ? newId : id));
+                }
+            });
+
+            if (selectedBlockSpots.has(oldId)) {
+                selectedBlockSpots.delete(oldId);
+                selectedBlockSpots.add(newId);
+            }
+
+            editingSpotId = newId;
+        }
+    }
+
+    const angleInput = document.getElementById('spotAngleNumInput');
+    if (angleInput) {
+        spot.angle = parseFloat(angleInput.value) || 0;
+    }
+
     document.getElementById('editSpotModal').classList.remove('active');
+    renderMap();
+    updateStats();
     saveMapToServer(true);
 }
 
 function deleteCurrentSpot() {
     if (confirm(`Удалить место №${editingSpotId}?`)) {
         currentData.spots = (currentData.spots || []).filter(s => s.id !== editingSpotId);
+        (currentData.blockers || []).forEach(b => {
+            if (Array.isArray(b.blockedSpots)) {
+                b.blockedSpots = b.blockedSpots.filter(id => id !== editingSpotId);
+            }
+        });
         document.getElementById('editSpotModal').classList.remove('active');
         renderMap();
         updateStats();
@@ -847,9 +914,9 @@ function deleteCurrentLm() {
     }
 }
 
-// Сохранение схемы на сервере с PIN 3418
+// Сохранение схемы на сервере
 async function saveMapToServer(silent = false) {
-    const pin = adminPin || '3418';
+    const pin = adminPin;
 
     try {
         const res = await fetch('/api/admin/map', {
@@ -858,7 +925,8 @@ async function saveMapToServer(silent = false) {
             body: JSON.stringify({
                 pin: pin,
                 landmarks: currentData.landmarks,
-                spots: currentData.spots
+                spots: currentData.spots,
+                blockers: currentData.blockers
             })
         });
         const ans = await res.json();
