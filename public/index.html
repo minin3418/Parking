@@ -116,6 +116,7 @@
             color: var(--amber);
             font-weight: bold;
             cursor: pointer;
+            text-decoration: underline;
         }
 
         #adminEditorBar {
@@ -302,7 +303,7 @@
             <button class="btn btn-cyan" onclick="addNewLandmark()">+ Объект</button>
             <button class="btn btn-amber" onclick="saveMapToServer()">💾 Сохранить схему</button>
         </div>
-        <p style="font-size:11px; color:#ffb300; margin-top:8px;">🖐 <b>Перетаскивайте</b> машинки и объекты прямо по схеме! Нажмите на объект для угла ориентации или удаления.</p>
+        <p style="font-size:11px; color:#ffb300; margin-top:8px;">🖐 <b>Перетаскивайте</b> машинки и объекты прямо по схеме! Нажмите на объект для изменения угла или удаления.</p>
     </div>
 
     <div class="hint-bar" id="instructionBar">
@@ -322,10 +323,8 @@
             <path d="M 0,200 Q 400,230 700,200 T 960,160" fill="none" stroke="#263238" stroke-width="110" stroke-linecap="round" />
             <path d="M 0,200 Q 400,230 700,200 T 960,160" fill="none" stroke="#455a64" stroke-width="2.5" stroke-dasharray="12,12" />
 
-            <!-- Buildings bottom -->
+            <!-- Buildings bottom (Магазин теперь динамический объект, редактируемый и удаляемый) -->
             <rect x="10" y="385" width="260" height="50" rx="4" fill="#1e242b" />
-            <rect x="450" y="380" width="100" height="56" rx="6" fill="#2b271d" stroke="#5d4037" stroke-width="2" />
-            <text x="500" y="415" fill="#ffb74d" font-size="11" font-weight="bold" text-anchor="middle">МАГАЗИН</text>
             <rect x="690" y="385" width="260" height="50" rx="4" fill="#1e242b" />
 
             <!-- Dynamic Group for Landmarks, Spots & Blockers -->
@@ -384,19 +383,50 @@
         </div>
     </div>
 
-    <!-- Landmark Edit Dialog (Admin) -->
+    <!-- Landmark Edit Dialog (Admin) с настройкой ориентации -->
     <div class="modal-overlay" id="editLandmarkModal">
         <div class="sheet">
-            <h2 style="font-size:18px; margin-bottom:8px;">Редактировать объект</h2>
-            <p style="font-size:12px; color:#00bcd4; margin-bottom:12px;">🖐 Перемещение: перетаскивайте объект пальцем/мышкой по схеме!</p>
+            <h2 id="editLmTitle" style="font-size:18px; margin-bottom:8px;">Редактировать объект</h2>
+            <p style="font-size:12px; color:#00bcd4; margin-bottom:12px;">🖐 Перемещение: перетаскивайте объект прямо по схеме!</p>
+            
             <div class="input-group">
                 <label>Текст объекта / ориентира:</label>
-                <input type="text" id="lmTextInput" placeholder="напр. 🚧 Шлагбаум">
+                <input type="text" id="lmTextInput" placeholder="напр. 🚧 Шлагбаум, 🏬 МАГАЗИН">
             </div>
+
+            <div class="input-group">
+                <label>Угол ориентации (градусы):</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="number" id="lmAngleNumInput" min="-180" max="180" value="0" style="width:110px;" oninput="onLmAngleNumInput(this.value)">
+                    <span style="font-size:13px; color:var(--text-secondary);">градусов (-180° .. 180°)</span>
+                </div>
+                <input type="range" id="lmAngleInput" min="-180" max="180" value="0" style="margin-top:10px;" oninput="onLmAngleSliderChange(this.value)">
+                
+                <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setLmAnglePreset(0)">0° (гориз.)</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setLmAnglePreset(90)">90° (верт.)</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setLmAnglePreset(-90)">-90°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setLmAnglePreset(45)">45°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setLmAnglePreset(-45)">-45°</button>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:11px;" onclick="setLmAnglePreset(180)">180°</button>
+                </div>
+            </div>
+
             <div style="display:flex; gap:8px; margin-top:16px;">
                 <button class="btn btn-cyan" style="flex:1; justify-content:center;" onclick="saveLmEdit()">Сохранить</button>
                 <button class="btn btn-red" onclick="deleteCurrentLm()">Удалить объект</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Список подперевших авто (2-й ряд) -->
+    <div class="modal-overlay" id="blockersModal">
+        <div class="sheet">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h2 style="font-size:18px;">⚠️ Второй ряд (Подпёрли)</h2>
+                <button class="btn btn-outline" onclick="closeBlockersModal()">✕</button>
+            </div>
+            <div id="blockersListContent"></div>
         </div>
     </div>
 
