@@ -7,15 +7,16 @@ let selectedBlockSpots = new Set();
 let editingSpotId = null;
 let editingLandmarkId = null;
 
-// Если ранее админ уже входил с PIN 3418 — восстанавливаем статус
+let draggingItem = null; // { type: 'spot' | 'landmark', id, startX, startY, origX, origY, hasMoved }
+
+// Если ранее админ уже входил с PIN 3418 — восстанавливаем
 if (adminPin === '3418') {
     isAdmin = true;
 }
 
 // Загрузка данных с сервера
 async function loadData() {
-    // ВАЖНО: Во время активного режима редактирования схемы не затираем изменения фоновым опросом!
-    if (isEditMapMode) return;
+    if (isEditMapMode) return; // не затирать фоновым опросом при редактировании
 
     try {
         const res = await fetch('/api/data');
@@ -33,7 +34,7 @@ function updateStats() {
     document.getElementById('blockersCount').textContent = `${currentData.blockers.length} авто`;
 }
 
-// Всплывающее уведомление об автосохранении
+// Всплывающее уведомление
 function showToast(msg) {
     let toast = document.getElementById('toast');
     if (!toast) {
@@ -54,7 +55,16 @@ function showToast(msg) {
     }
     toast.textContent = msg;
     toast.style.display = 'block';
-    setTimeout(() => { toast.style.display = 'none'; }, 2500);
+    setTimeout(() => { toast.style.display = 'none'; }, 2200);
+}
+
+// Перевод координат экрана в систему координат SVG (960x440)
+function getSvgCoords(evt) {
+    const svg = document.getElementById('yardMap');
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
 }
 
 // Отрисовка карты в SVG
@@ -67,7 +77,7 @@ function renderMap() {
     blockersLayer.innerHTML = '';
     landmarksLayer.innerHTML = '';
 
-    // 1. Отрисовка ориентиров / надписей
+    // 1. Отрисовка объектов/надписей с поддержкой Drag-and-Drop
     (currentData.landmarks || []).forEach(lm => {
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', lm.x);
@@ -76,15 +86,61 @@ function renderMap() {
         text.setAttribute('font-size', '12');
         text.setAttribute('font-weight', 'bold');
         text.setAttribute('text-anchor', 'middle');
-        text.style.cursor = isEditMapMode ? 'pointer' : 'default';
+        text.style.cursor = isEditMapMode ? 'grab' : 'default';
+        text.style.touchAction = 'none';
         text.textContent = lm.text;
+
         if (isEditMapMode) {
-            text.onclick = (e) => { e.stopPropagation(); openEditLandmark(lm.id); };
+            text.onpointerdown = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const coords = getSvgCoords(e);
+                draggingItem = {
+                    type: 'landmark',
+                    id: lm.id,
+                    startMouseX: coords.x,
+                    startMouseY: coords.y,
+                    origX: lm.x,
+                    origY: lm.y,
+                    hasMoved: false
+                };
+                text.style.cursor = 'grabbing';
+                text.setPointerCapture(e.pointerId);
+            };
+
+            text.onpointermove = (e) => {
+                if (draggingItem && draggingItem.type === 'landmark' && draggingItem.id === lm.id) {
+                    const coords = getSvgCoords(e);
+                    const dx = coords.x - draggingItem.startMouseX;
+                    const dy = coords.y - draggingItem.startMouseY;
+                    if (Math.hypot(dx, dy) > 3) {
+                        draggingItem.hasMoved = true;
+                        lm.x = Math.round(Math.max(15, Math.min(945, draggingItem.origX + dx)));
+                        lm.y = Math.round(Math.max(15, Math.min(425, draggingItem.origY + dy)));
+                        text.setAttribute('x', lm.x);
+                        text.setAttribute('y', lm.y);
+                    }
+                }
+            };
+
+            text.onpointerup = (e) => {
+                if (draggingItem && draggingItem.type === 'landmark' && draggingItem.id === lm.id) {
+                    try { text.releasePointerCapture(e.pointerId); } catch (_) {}
+                    text.style.cursor = 'grab';
+                    if (!draggingItem.hasMoved) {
+                        openEditLandmark(lm.id);
+                    } else {
+                        saveMapToServer(true); // автосохранение новой позиции
+                    }
+                    draggingItem = null;
+                }
+            };
         }
+
         landmarksLayer.appendChild(text);
     });
 
-    // 2. Отрисовка парковочных мест
+    // 2. Отрисовка парковочных мест с поддержкой Drag-and-Drop
     currentData.spots.forEach(spot => {
         const isFree = !spot.occupiedBy;
         const isBlocked = currentData.blockers.some(b => b.blockedSpots.includes(spot.id));
@@ -93,9 +149,56 @@ function renderMap() {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         const angle = spot.angle || 0;
         g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${angle})`);
-        g.style.cursor = 'pointer';
+        g.style.cursor = isEditMapMode ? 'grab' : 'pointer';
+        g.style.touchAction = 'none';
 
-        g.onclick = () => onSpotClicked(spot);
+        if (isEditMapMode) {
+            g.onpointerdown = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const coords = getSvgCoords(e);
+                draggingItem = {
+                    type: 'spot',
+                    id: spot.id,
+                    startMouseX: coords.x,
+                    startMouseY: coords.y,
+                    origX: spot.x,
+                    origY: spot.y,
+                    hasMoved: false
+                };
+                g.style.cursor = 'grabbing';
+                g.setPointerCapture(e.pointerId);
+            };
+
+            g.onpointermove = (e) => {
+                if (draggingItem && draggingItem.type === 'spot' && draggingItem.id === spot.id) {
+                    const coords = getSvgCoords(e);
+                    const dx = coords.x - draggingItem.startMouseX;
+                    const dy = coords.y - draggingItem.startMouseY;
+                    if (Math.hypot(dx, dy) > 3) {
+                        draggingItem.hasMoved = true;
+                        spot.x = Math.round(Math.max(20, Math.min(940, draggingItem.origX + dx)));
+                        spot.y = Math.round(Math.max(20, Math.min(420, draggingItem.origY + dy)));
+                        g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${spot.angle || 0})`);
+                    }
+                }
+            };
+
+            g.onpointerup = (e) => {
+                if (draggingItem && draggingItem.type === 'spot' && draggingItem.id === spot.id) {
+                    try { g.releasePointerCapture(e.pointerId); } catch (_) {}
+                    g.style.cursor = 'grab';
+                    if (!draggingItem.hasMoved) {
+                        openEditSpot(spot.id);
+                    } else {
+                        saveMapToServer(true); // автосохранение новой позиции
+                    }
+                    draggingItem = null;
+                }
+            };
+        } else {
+            g.onclick = () => onSpotClicked(spot);
+        }
 
         if (isFree) {
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -214,11 +317,6 @@ function renderMap() {
 }
 
 function onSpotClicked(spot) {
-    if (isEditMapMode) {
-        openEditSpot(spot.id);
-        return;
-    }
-
     if (isRow2SelectMode) {
         if (selectedBlockSpots.has(spot.id)) {
             selectedBlockSpots.delete(spot.id);
@@ -396,7 +494,7 @@ async function submitRow2() {
     loadData();
 }
 
-// ----------------- РЕДАКТОР КАРТЫ ДЛЯ АДМИНИСТРАТОРА (PIN: 3418) -----------------
+// ----------------- РЕДАКТОР СХЕМЫ ДЛЯ АДМИНИСТРАТОРА (PIN: 3418) -----------------
 
 function toggleAdmin() {
     if (!isAdmin) {
@@ -443,24 +541,37 @@ function addNewSpot() {
     });
     renderMap();
     openEditSpot(nextId);
-    saveMapToServer(true); // мгновенное сохранение
+    saveMapToServer(true);
 }
 
-// Редактировать место
+// Открыть настройку места (угол и удаление)
 function openEditSpot(spotId) {
     editingSpotId = spotId;
     const spot = currentData.spots.find(s => s.id === spotId);
     if (!spot) return;
 
     document.getElementById('editSpotTitle').textContent = `Настройка места №${spot.id}`;
-    document.getElementById('spotAngleInput').value = spot.angle || 0;
-    document.getElementById('angleValue').textContent = spot.angle || 0;
+    const angle = spot.angle || 0;
+    document.getElementById('spotAngleInput').value = angle;
+    document.getElementById('spotAngleNumInput').value = angle;
 
     document.getElementById('editSpotModal').classList.add('active');
 }
 
-function onAngleChange(val) {
-    document.getElementById('angleValue').textContent = val;
+// Изменение угла вручную вводом цифр
+function onAngleNumInput(val) {
+    const angle = parseFloat(val) || 0;
+    document.getElementById('spotAngleInput').value = angle;
+    const spot = currentData.spots.find(s => s.id === editingSpotId);
+    if (spot) {
+        spot.angle = angle;
+        renderMap();
+    }
+}
+
+// Изменение угла ползунком
+function onAngleSliderChange(val) {
+    document.getElementById('spotAngleNumInput').value = val;
     const spot = currentData.spots.find(s => s.id === editingSpotId);
     if (spot) {
         spot.angle = Number(val);
@@ -468,18 +579,20 @@ function onAngleChange(val) {
     }
 }
 
-function adjustSpotPos(dx, dy) {
+// Быстрые пресеты угла
+function setAnglePreset(deg) {
+    document.getElementById('spotAngleNumInput').value = deg;
+    document.getElementById('spotAngleInput').value = deg;
     const spot = currentData.spots.find(s => s.id === editingSpotId);
     if (spot) {
-        spot.x += dx;
-        spot.y += dy;
+        spot.angle = deg;
         renderMap();
     }
 }
 
 function saveSpotEdit() {
     document.getElementById('editSpotModal').classList.remove('active');
-    saveMapToServer(true); // мгновенно сохраняем изменения на сервере
+    saveMapToServer(true);
 }
 
 function deleteCurrentSpot() {
@@ -488,11 +601,11 @@ function deleteCurrentSpot() {
         document.getElementById('editSpotModal').classList.remove('active');
         renderMap();
         updateStats();
-        saveMapToServer(true); // мгновенно удаляем на сервере
+        saveMapToServer(true);
     }
 }
 
-// Добавить ориентир/объект
+// Добавить ориентир
 function addNewLandmark() {
     const text = prompt('Введите название объекта (напр. 🚧 Шлагбаум, 🏢 Корпус 3, 🗑 Мусорка):', '🚧 ШЛАГБАУМ');
     if (!text || !text.trim()) return;
@@ -504,10 +617,10 @@ function addNewLandmark() {
         y: 220
     });
     renderMap();
-    saveMapToServer(true); // мгновенное сохранение
+    saveMapToServer(true);
 }
 
-// Редактировать ориентир
+// Открыть редактирование ориентира
 function openEditLandmark(id) {
     editingLandmarkId = id;
     const lm = currentData.landmarks.find(l => l.id === id);
@@ -517,15 +630,6 @@ function openEditLandmark(id) {
     document.getElementById('editLandmarkModal').classList.add('active');
 }
 
-function adjustLmPos(dx, dy) {
-    const lm = currentData.landmarks.find(l => l.id === editingLandmarkId);
-    if (lm) {
-        lm.x += dx;
-        lm.y += dy;
-        renderMap();
-    }
-}
-
 function saveLmEdit() {
     const lm = currentData.landmarks.find(l => l.id === editingLandmarkId);
     if (lm) {
@@ -533,20 +637,19 @@ function saveLmEdit() {
         renderMap();
     }
     document.getElementById('editLandmarkModal').classList.remove('active');
-    saveMapToServer(true); // мгновенное сохранение
+    saveMapToServer(true);
 }
 
-// Удалить объект
 function deleteCurrentLm() {
     if (confirm('Удалить этот объект со схемы?')) {
         currentData.landmarks = currentData.landmarks.filter(l => l.id !== editingLandmarkId);
         document.getElementById('editLandmarkModal').classList.remove('active');
         renderMap();
-        saveMapToServer(true); // мгновенное удаление на сервере в data.json
+        saveMapToServer(true);
     }
 }
 
-// Отправка схемы на сервер (с PIN 3418)
+// Сохранение схемы на сервере с PIN 3418
 async function saveMapToServer(silent = false) {
     const pin = adminPin || '3418';
 
@@ -579,7 +682,7 @@ function closeModal() {
     document.getElementById('spotModal').classList.remove('active');
 }
 
-// Инициализация при открытии страницы
+// Инициализация при открытии
 if (isAdmin) {
     document.getElementById('roleBadge').textContent = '★ Админ';
     document.getElementById('roleBadge').classList.add('active');
@@ -588,4 +691,4 @@ if (isAdmin) {
 }
 
 loadData();
-setInterval(loadData, 10000); // авто-обновление каждые 10 секунд (блокируется при редактировании)
+setInterval(loadData, 10000);
