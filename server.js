@@ -15,8 +15,22 @@ function isPinValid(pin) {
   return p === ADMIN_PIN || p === '3418';
 }
 
+// Поддержка CORS (для мобильных приложений, WebView и браузеров)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
+
+// Раздача статики: папка public и корень проекта
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // Начальная схема двора
 function getInitialData() {
@@ -44,10 +58,10 @@ function getInitialData() {
   }
 
   const landmarks = [
-    { id: 'barrier', text: '🚧 ШЛАГБАУМ', x: 45, y: 195 },
-    { id: 'bldg22', text: 'д. 22', x: 140, y: 410 },
-    { id: 'shop', text: 'МАГАЗИН', x: 500, y: 410 },
-    { id: 'bldg22a', text: 'д. 22А', x: 820, y: 410 }
+    { id: 'barrier', text: '🚧 ШЛАГБАУМ', x: 45, y: 195, angle: 0 },
+    { id: 'bldg22', text: 'д. 22', x: 140, y: 410, angle: 0 },
+    { id: 'shop', text: '🏬 МАГАЗИН', x: 500, y: 410, angle: 0 },
+    { id: 'bldg22a', text: 'д. 22А', x: 820, y: 410, angle: 0 }
   ];
 
   const surveys = [
@@ -78,6 +92,16 @@ function getData() {
     if (!data.landmarks) data.landmarks = [];
     if (!data.blockers) data.blockers = [];
     if (!data.surveys) data.surveys = [];
+
+    // Гарантируем наличие угла angle у каждого объекта
+    data.landmarks = data.landmarks.map(lm => ({
+      id: String(lm.id),
+      text: String(lm.text || ''),
+      x: Number(lm.x),
+      y: Number(lm.y),
+      angle: Number(lm.angle || 0)
+    }));
+
     return data;
   } catch (e) {
     const init = getInitialData();
@@ -94,8 +118,28 @@ function saveData(data) {
   }
 }
 
-// 1. Получить актуальные данные схемы
-app.get('/api/data', (req, res) => {
+// 1. Получить актуальные данные схемы (с алиасами для приложений)
+const DATA_ROUTES = [
+  '/api/data',
+  '/data',
+  '/data.json',
+  '/api/data.json',
+  '/api/spots',
+  '/spots',
+  '/api/map',
+  '/map',
+  '/api/yard',
+  '/api/parking',
+  '/parking',
+  '/api/update',
+  '/update'
+];
+
+app.get(DATA_ROUTES, (req, res) => {
+  res.json(getData());
+});
+
+app.post(['/api/update', '/update', '/api/data'], (req, res) => {
   res.json(getData());
 });
 
@@ -140,7 +184,7 @@ app.post('/api/leave', (req, res) => {
     return res.json({ success: true, message: 'Освобождено администратором' });
   }
 
-  const phone = spot.occupiedBy.phone.replace(/\D/g, '');
+  const phone = (spot.occupiedBy.phone || '').replace(/\D/g, '');
   const digits = (lastDigits || '').trim();
   if (!digits || !phone.endsWith(digits)) {
     return res.status(403).json({ error: 'Неверные последние 4 цифры номера телефона' });
@@ -211,7 +255,7 @@ app.post('/api/admin/verify', (req, res) => {
   }
 });
 
-// 7. Сохранение схемы двора (места, ряды, углы, надписи, удаление объектов)
+// 7. Сохранение схемы двора (с поддержкой углов ориентации объектов)
 app.post('/api/admin/map', (req, res) => {
   const { pin, landmarks, spots } = req.body;
   if (!isPinValid(pin)) {
@@ -234,12 +278,12 @@ app.post('/api/admin/map', (req, res) => {
   }
 
   if (Array.isArray(landmarks)) {
-    // Полная перезапись ориентиров: удалённые объекты удаляются из базы
     data.landmarks = landmarks.map(lm => ({
       id: String(lm.id || ('lm_' + Date.now())),
       text: String(lm.text || '').trim(),
       x: Number(lm.x),
-      y: Number(lm.y)
+      y: Number(lm.y),
+      angle: Number(lm.angle || 0)
     }));
   }
 
@@ -263,6 +307,15 @@ app.post('/api/survey/vote', (req, res) => {
   }
   saveData(data);
   res.json({ success: true, votes: survey.votes });
+});
+
+// Раздача главной страницы
+app.get('/', (req, res) => {
+  const publicIndex = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(publicIndex)) {
+    return res.sendFile(publicIndex);
+  }
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, () => {
