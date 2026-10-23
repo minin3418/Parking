@@ -7,7 +7,7 @@ let selectedBlockSpots = new Set();
 let editingSpotId = null;
 let editingLandmarkId = null;
 
-let draggingItem = null; // { type: 'spot' | 'landmark', id, startX, startY, origX, origY, hasMoved }
+let draggingItem = null; // { type: 'spot' | 'landmark', id, startMouseX, startMouseY, origX, origY, hasMoved }
 
 // Если ранее админ уже входил с PIN 3418 — восстанавливаем
 if (adminPin === '3418') {
@@ -20,6 +20,10 @@ async function loadData() {
 
     try {
         const res = await fetch('/api/data');
+        if (!res.ok) {
+            console.warn(`Сервер вернул статус HTTP ${res.status}`);
+            return;
+        }
         currentData = await res.json();
         renderMap();
         updateStats();
@@ -29,9 +33,14 @@ async function loadData() {
 }
 
 function updateStats() {
-    const free = currentData.spots.filter(s => !s.occupiedBy).length;
-    document.getElementById('freeCount').textContent = `${free} из ${currentData.spots.length}`;
-    document.getElementById('blockersCount').textContent = `${currentData.blockers.length} авто`;
+    const free = (currentData.spots || []).filter(s => !s.occupiedBy).length;
+    const total = (currentData.spots || []).length;
+    const freeEl = document.getElementById('freeCount');
+    if (freeEl) freeEl.textContent = `${free} из ${total}`;
+
+    const blockers = (currentData.blockers || []).length;
+    const blockersEl = document.getElementById('blockersCount');
+    if (blockersEl) blockersEl.textContent = `${blockers} авто`;
 }
 
 // Всплывающее уведомление
@@ -73,25 +82,58 @@ function renderMap() {
     const blockersLayer = document.getElementById('blockersLayer');
     const landmarksLayer = document.getElementById('landmarksLayer');
 
+    if (!spotsLayer || !blockersLayer || !landmarksLayer) return;
+
     spotsLayer.innerHTML = '';
     blockersLayer.innerHTML = '';
     landmarksLayer.innerHTML = '';
 
-    // 1. Отрисовка объектов/надписей с поддержкой Drag-and-Drop
+    // 1. Отрисовка объектов/надписей с поддержкой ориентации (угла) и Drag-and-Drop
     (currentData.landmarks || []).forEach(lm => {
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', lm.x);
-        text.setAttribute('y', lm.y);
-        text.setAttribute('fill', isEditMapMode ? '#ffd54f' : '#90a4ae');
-        text.setAttribute('font-size', '12');
-        text.setAttribute('font-weight', 'bold');
-        text.setAttribute('text-anchor', 'middle');
-        text.style.cursor = isEditMapMode ? 'grab' : 'default';
-        text.style.touchAction = 'none';
-        text.textContent = lm.text;
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const angle = lm.angle || 0;
+        g.setAttribute('transform', `translate(${lm.x}, ${lm.y}) rotate(${angle})`);
+        g.style.cursor = isEditMapMode ? 'grab' : 'pointer';
+        g.style.touchAction = 'none';
+
+        const textLen = (lm.text || '').length;
+        const boxWidth = Math.max(64, textLen * 8.5 + 18);
+        const boxHeight = 26;
+
+        // Рамка-подложка: кликабельная область и визуальная подсветка
+        const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        box.setAttribute('x', -boxWidth / 2);
+        box.setAttribute('y', -boxHeight / 2);
+        box.setAttribute('width', boxWidth);
+        box.setAttribute('height', boxHeight);
+        box.setAttribute('rx', '6');
 
         if (isEditMapMode) {
-            text.onpointerdown = (e) => {
+            box.setAttribute('fill', 'rgba(255, 213, 79, 0.18)');
+            box.setAttribute('stroke', '#ffd54f');
+            box.setAttribute('stroke-width', '1.5');
+            box.setAttribute('stroke-dasharray', '4,3');
+        } else {
+            box.setAttribute('fill', 'rgba(26, 32, 38, 0.65)');
+            box.setAttribute('stroke', '#37474f');
+            box.setAttribute('stroke-width', '1');
+        }
+        g.appendChild(box);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', '0');
+        text.setAttribute('y', '0');
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', isEditMapMode ? '#ffd54f' : '#b0bec5');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('font-weight', 'bold');
+        text.style.userSelect = 'none';
+        text.textContent = lm.text;
+        g.appendChild(text);
+
+        if (isEditMapMode) {
+            g.onpointerdown = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 const coords = getSvgCoords(e);
@@ -104,11 +146,11 @@ function renderMap() {
                     origY: lm.y,
                     hasMoved: false
                 };
-                text.style.cursor = 'grabbing';
-                text.setPointerCapture(e.pointerId);
+                g.style.cursor = 'grabbing';
+                g.setPointerCapture(e.pointerId);
             };
 
-            text.onpointermove = (e) => {
+            g.onpointermove = (e) => {
                 if (draggingItem && draggingItem.type === 'landmark' && draggingItem.id === lm.id) {
                     const coords = getSvgCoords(e);
                     const dx = coords.x - draggingItem.startMouseX;
@@ -117,16 +159,15 @@ function renderMap() {
                         draggingItem.hasMoved = true;
                         lm.x = Math.round(Math.max(15, Math.min(945, draggingItem.origX + dx)));
                         lm.y = Math.round(Math.max(15, Math.min(425, draggingItem.origY + dy)));
-                        text.setAttribute('x', lm.x);
-                        text.setAttribute('y', lm.y);
+                        g.setAttribute('transform', `translate(${lm.x}, ${lm.y}) rotate(${lm.angle || 0})`);
                     }
                 }
             };
 
-            text.onpointerup = (e) => {
+            g.onpointerup = (e) => {
                 if (draggingItem && draggingItem.type === 'landmark' && draggingItem.id === lm.id) {
-                    try { text.releasePointerCapture(e.pointerId); } catch (_) {}
-                    text.style.cursor = 'grab';
+                    try { g.releasePointerCapture(e.pointerId); } catch (_) {}
+                    g.style.cursor = 'grab';
                     if (!draggingItem.hasMoved) {
                         openEditLandmark(lm.id);
                     } else {
@@ -135,15 +176,19 @@ function renderMap() {
                     draggingItem = null;
                 }
             };
+        } else {
+            g.onclick = () => {
+                showToast(`Объект: ${lm.text}`);
+            };
         }
 
-        landmarksLayer.appendChild(text);
+        landmarksLayer.appendChild(g);
     });
 
     // 2. Отрисовка парковочных мест с поддержкой Drag-and-Drop
-    currentData.spots.forEach(spot => {
+    (currentData.spots || []).forEach(spot => {
         const isFree = !spot.occupiedBy;
-        const isBlocked = currentData.blockers.some(b => b.blockedSpots.includes(spot.id));
+        const isBlocked = (currentData.blockers || []).some(b => b.blockedSpots.includes(spot.id));
         const isSelectedRow2 = selectedBlockSpots.has(spot.id);
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -270,8 +315,8 @@ function renderMap() {
     });
 
     // 3. Отрисовка авто во 2-м ряду
-    currentData.blockers.forEach(blocker => {
-        const targets = currentData.spots.filter(s => blocker.blockedSpots.includes(s.id));
+    (currentData.blockers || []).forEach(blocker => {
+        const targets = (currentData.spots || []).filter(s => blocker.blockedSpots.includes(s.id));
         const avgX = targets.length ? targets.reduce((a, b) => a + b.x, 0) / targets.length : 480;
         const avgY = 195;
 
@@ -335,7 +380,7 @@ function openSpotModal(spot) {
     const body = document.getElementById('spotModalBody');
     document.getElementById('modalSpotTitle').textContent = `Место №${spot.id} (${spot.occupiedBy ? 'Занято' : 'Свободно'})`;
 
-    const blocker = currentData.blockers.find(b => b.blockedSpots.includes(spot.id));
+    const blocker = (currentData.blockers || []).find(b => b.blockedSpots.includes(spot.id));
     let blockerHtml = '';
     if (blocker) {
         blockerHtml = `
@@ -404,16 +449,20 @@ async function submitPark(spotId) {
 
     if (!carNumber) return alert('Введите номер авто');
 
-    const res = await fetch('/api/park', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotId, carNumber, phone, apt, leaveTime })
-    });
-    const ans = await res.json();
-    if (ans.error) return alert(ans.error);
+    try {
+        const res = await fetch('/api/park', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spotId, carNumber, phone, apt, leaveTime })
+        });
+        const ans = await res.json();
+        if (ans.error) return alert(ans.error);
 
-    closeModal();
-    loadData();
+        closeModal();
+        loadData();
+    } catch (e) {
+        alert('Ошибка связи с сервером: ' + e.message);
+    }
 }
 
 // Освободить место
@@ -424,18 +473,23 @@ async function submitLeave(spotId) {
         pin = adminPin || '3418';
     } else {
         digits = prompt('Введите последние 4 цифры вашего номера телефона:');
+        if (digits === null) return;
     }
 
-    const res = await fetch('/api/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotId, lastDigits: digits, pin })
-    });
-    const ans = await res.json();
-    if (ans.error) return alert(ans.error);
+    try {
+        const res = await fetch('/api/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spotId, lastDigits: digits, pin })
+        });
+        const ans = await res.json();
+        if (ans.error) return alert(ans.error);
 
-    closeModal();
-    loadData();
+        closeModal();
+        loadData();
+    } catch (e) {
+        alert('Ошибка связи с сервером: ' + e.message);
+    }
 }
 
 // Режим 2-го ряда
@@ -475,23 +529,124 @@ async function submitRow2() {
     if (!carNumber || !phone) return alert('Укажите авто и телефон');
     if (selectedBlockSpots.size === 0) return alert('Выберите на карте хотя бы одно место, которое перекрыли');
 
-    const res = await fetch('/api/blocker', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            carNumber,
-            phone,
-            blockedSpots: Array.from(selectedBlockSpots),
-            leaveTime
-        })
-    });
-    const ans = await res.json();
-    if (ans.error) return alert(ans.error);
+    try {
+        const res = await fetch('/api/blocker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                carNumber,
+                phone,
+                blockedSpots: Array.from(selectedBlockSpots),
+                leaveTime
+            })
+        });
+        const ans = await res.json();
+        if (ans.error) return alert(ans.error);
 
-    isRow2SelectMode = false;
-    selectedBlockSpots.clear();
-    closeModal();
-    loadData();
+        isRow2SelectMode = false;
+        selectedBlockSpots.clear();
+        closeModal();
+        loadData();
+    } catch (e) {
+        alert('Ошибка связи с сервером: ' + e.message);
+    }
+}
+
+// Просмотр деталей авто 2-го ряда
+function openBlockerDetails(blocker) {
+    const modal = document.getElementById('spotModal');
+    const body = document.getElementById('spotModalBody');
+    document.getElementById('modalSpotTitle').textContent = `Авто 2-го ряда: ${blocker.carNumber}`;
+
+    const spotsList = (blocker.blockedSpots || []).join(', ');
+
+    body.innerHTML = `
+        <div class="number-plate" style="background:#ffb300; border-color:#e65100;">${blocker.carNumber}</div>
+        <p style="margin-bottom:6px;">Перекрыл места: <b>№${spotsList}</b></p>
+        <p style="margin-bottom:6px;">Телефон: <b>${blocker.phone || 'Не указан'}</b></p>
+        ${blocker.leaveTime ? `<p style="color:#ffd54f; margin-bottom:8px;">Планирует уехать: <b>${blocker.leaveTime}</b></p>` : ''}
+
+        <div style="display:flex; gap:8px; margin:14px 0;">
+            ${blocker.phone ? `<a href="tel:${blocker.phone}" class="btn btn-green" style="flex:1; justify-content:center; text-decoration:none;">📞 Позвонить</a>` : ''}
+            ${blocker.phone ? `<a href="sms:${blocker.phone}?body=Здравствуйте! Освободите, пожалуйста, выезд." class="btn btn-cyan" style="flex:1; justify-content:center; text-decoration:none;">💬 SMS</a>` : ''}
+        </div>
+
+        <button class="btn btn-red" style="width:100%; justify-content:center; padding:10px;" onclick="submitLeaveBlocker('${blocker.id}')">
+            Убрать машину со 2-го ряда
+        </button>
+    `;
+    modal.classList.add('active');
+}
+
+// Список всех авто 2-го ряда
+function openBlockersList() {
+    const modal = document.getElementById('blockersModal');
+    const content = document.getElementById('blockersListContent');
+    const blockers = currentData.blockers || [];
+
+    if (blockers.length === 0) {
+        content.innerHTML = `
+            <div style="text-align:center; padding:24px 0; color:#81c784;">
+                <p style="font-size:28px; margin-bottom:8px;">✓</p>
+                <b>Сейчас во 2-м ряду машин нет</b>
+                <p style="font-size:12px; color:#90a4ae; margin-top:4px;">Все выезды свободны</p>
+            </div>
+        `;
+    } else {
+        let html = '';
+        blockers.forEach(b => {
+            const spotsList = (b.blockedSpots || []).join(', ');
+            html += `
+                <div style="background:#242c35; border:1px solid #ffb300; border-radius:10px; padding:12px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <b style="font-size:16px; color:#ffb300;">${b.carNumber}</b>
+                        <span style="font-size:11px; color:#90a4ae;">до ${b.leaveTime || 'утра'}</span>
+                    </div>
+                    <p style="font-size:12px; color:#cfd8dc; margin:6px 0;">Перекрыл места: <b>№${spotsList}</b></p>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        ${b.phone ? `<a href="tel:${b.phone}" class="btn btn-green" style="padding:4px 10px; font-size:12px; text-decoration:none;">📞 ${b.phone}</a>` : ''}
+                        <button class="btn btn-outline" style="padding:4px 10px; font-size:12px;" onclick="closeBlockersModal(); openBlockerDetails(${JSON.stringify(b).replace(/"/g, '&quot;')})">Подробнее</button>
+                    </div>
+                </div>
+            `;
+        });
+        content.innerHTML = html;
+    }
+
+    modal.classList.add('active');
+}
+
+function closeBlockersModal() {
+    const modal = document.getElementById('blockersModal');
+    if (modal) modal.classList.remove('active');
+}
+
+// Освободить место во 2-м ряду
+async function submitLeaveBlocker(blockerId) {
+    let digits = '';
+    let pin = '';
+    if (isAdmin) {
+        pin = adminPin || '3418';
+    } else {
+        digits = prompt('Введите последние 4 цифры вашего номера телефона:');
+        if (digits === null) return;
+    }
+
+    try {
+        const res = await fetch('/api/blocker/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blockerId, lastDigits: digits, pin })
+        });
+        const ans = await res.json();
+        if (ans.error) return alert(ans.error);
+
+        closeModal();
+        closeBlockersModal();
+        loadData();
+    } catch (e) {
+        alert('Ошибка связи с сервером: ' + e.message);
+    }
 }
 
 // ----------------- РЕДАКТОР СХЕМЫ ДЛЯ АДМИНИСТРАТОРА (PIN: 3418) -----------------
@@ -531,7 +686,7 @@ function closeAdminEdit() {
 
 // Добавить место
 function addNewSpot() {
-    const nextId = (currentData.spots.reduce((max, s) => Math.max(max, s.id), 0) || 0) + 1;
+    const nextId = ((currentData.spots || []).reduce((max, s) => Math.max(max, s.id), 0) || 0) + 1;
     currentData.spots.push({
         id: nextId,
         x: 480,
@@ -547,7 +702,7 @@ function addNewSpot() {
 // Открыть настройку места (угол и удаление)
 function openEditSpot(spotId) {
     editingSpotId = spotId;
-    const spot = currentData.spots.find(s => s.id === spotId);
+    const spot = (currentData.spots || []).find(s => s.id === spotId);
     if (!spot) return;
 
     document.getElementById('editSpotTitle').textContent = `Настройка места №${spot.id}`;
@@ -558,32 +713,32 @@ function openEditSpot(spotId) {
     document.getElementById('editSpotModal').classList.add('active');
 }
 
-// Изменение угла вручную вводом цифр
+// Изменение угла места вручную
 function onAngleNumInput(val) {
     const angle = parseFloat(val) || 0;
     document.getElementById('spotAngleInput').value = angle;
-    const spot = currentData.spots.find(s => s.id === editingSpotId);
+    const spot = (currentData.spots || []).find(s => s.id === editingSpotId);
     if (spot) {
         spot.angle = angle;
         renderMap();
     }
 }
 
-// Изменение угла ползунком
+// Изменение угла места ползунком
 function onAngleSliderChange(val) {
     document.getElementById('spotAngleNumInput').value = val;
-    const spot = currentData.spots.find(s => s.id === editingSpotId);
+    const spot = (currentData.spots || []).find(s => s.id === editingSpotId);
     if (spot) {
         spot.angle = Number(val);
         renderMap();
     }
 }
 
-// Быстрые пресеты угла
+// Быстрые пресеты угла места
 function setAnglePreset(deg) {
     document.getElementById('spotAngleNumInput').value = deg;
     document.getElementById('spotAngleInput').value = deg;
-    const spot = currentData.spots.find(s => s.id === editingSpotId);
+    const spot = (currentData.spots || []).find(s => s.id === editingSpotId);
     if (spot) {
         spot.angle = deg;
         renderMap();
@@ -597,7 +752,7 @@ function saveSpotEdit() {
 
 function deleteCurrentSpot() {
     if (confirm(`Удалить место №${editingSpotId}?`)) {
-        currentData.spots = currentData.spots.filter(s => s.id !== editingSpotId);
+        currentData.spots = (currentData.spots || []).filter(s => s.id !== editingSpotId);
         document.getElementById('editSpotModal').classList.remove('active');
         renderMap();
         updateStats();
@@ -605,35 +760,78 @@ function deleteCurrentSpot() {
     }
 }
 
-// Добавить ориентир
+// Добавить ориентир/объект
 function addNewLandmark() {
-    const text = prompt('Введите название объекта (напр. 🚧 Шлагбаум, 🏢 Корпус 3, 🗑 Мусорка):', '🚧 ШЛАГБАУМ');
+    const text = prompt('Введите название объекта (напр. 🚧 Шлагбаум, 🏢 Корпус 3, 🏬 МАГАЗИН, 🗑 Мусорка):', '🚧 ШЛАГБАУМ');
     if (!text || !text.trim()) return;
 
+    const newId = 'lm_' + Date.now();
     currentData.landmarks.push({
-        id: 'lm_' + Date.now(),
+        id: newId,
         text: text.trim(),
         x: 480,
-        y: 220
+        y: 220,
+        angle: 0
     });
     renderMap();
+    openEditLandmark(newId);
     saveMapToServer(true);
 }
 
 // Открыть редактирование ориентира
 function openEditLandmark(id) {
     editingLandmarkId = id;
-    const lm = currentData.landmarks.find(l => l.id === id);
+    const lm = (currentData.landmarks || []).find(l => l.id === id);
     if (!lm) return;
 
-    document.getElementById('lmTextInput').value = lm.text;
+    const titleEl = document.getElementById('editLmTitle');
+    if (titleEl) titleEl.textContent = `Редактировать: ${lm.text}`;
+
+    document.getElementById('lmTextInput').value = lm.text || '';
+    const angle = lm.angle || 0;
+    document.getElementById('lmAngleInput').value = angle;
+    document.getElementById('lmAngleNumInput').value = angle;
+
     document.getElementById('editLandmarkModal').classList.add('active');
 }
 
+// Изменение угла объекта вводом цифр
+function onLmAngleNumInput(val) {
+    const angle = parseFloat(val) || 0;
+    document.getElementById('lmAngleInput').value = angle;
+    const lm = (currentData.landmarks || []).find(l => l.id === editingLandmarkId);
+    if (lm) {
+        lm.angle = angle;
+        renderMap();
+    }
+}
+
+// Изменение угла объекта ползунком
+function onLmAngleSliderChange(val) {
+    document.getElementById('lmAngleNumInput').value = val;
+    const lm = (currentData.landmarks || []).find(l => l.id === editingLandmarkId);
+    if (lm) {
+        lm.angle = Number(val);
+        renderMap();
+    }
+}
+
+// Быстрые пресеты угла объекта
+function setLmAnglePreset(deg) {
+    document.getElementById('lmAngleNumInput').value = deg;
+    document.getElementById('lmAngleInput').value = deg;
+    const lm = (currentData.landmarks || []).find(l => l.id === editingLandmarkId);
+    if (lm) {
+        lm.angle = deg;
+        renderMap();
+    }
+}
+
 function saveLmEdit() {
-    const lm = currentData.landmarks.find(l => l.id === editingLandmarkId);
+    const lm = (currentData.landmarks || []).find(l => l.id === editingLandmarkId);
     if (lm) {
         lm.text = document.getElementById('lmTextInput').value.trim();
+        lm.angle = parseFloat(document.getElementById('lmAngleNumInput').value) || 0;
         renderMap();
     }
     document.getElementById('editLandmarkModal').classList.remove('active');
@@ -642,7 +840,7 @@ function saveLmEdit() {
 
 function deleteCurrentLm() {
     if (confirm('Удалить этот объект со схемы?')) {
-        currentData.landmarks = currentData.landmarks.filter(l => l.id !== editingLandmarkId);
+        currentData.landmarks = (currentData.landmarks || []).filter(l => l.id !== editingLandmarkId);
         document.getElementById('editLandmarkModal').classList.remove('active');
         renderMap();
         saveMapToServer(true);
@@ -679,14 +877,19 @@ async function saveMapToServer(silent = false) {
 }
 
 function closeModal() {
-    document.getElementById('spotModal').classList.remove('active');
+    const modal = document.getElementById('spotModal');
+    if (modal) modal.classList.remove('active');
 }
 
 // Инициализация при открытии
 if (isAdmin) {
-    document.getElementById('roleBadge').textContent = '★ Админ';
-    document.getElementById('roleBadge').classList.add('active');
-    document.getElementById('adminEditorBar').style.display = 'block';
+    const badge = document.getElementById('roleBadge');
+    if (badge) {
+        badge.textContent = '★ Админ';
+        badge.classList.add('active');
+    }
+    const adminBar = document.getElementById('adminEditorBar');
+    if (adminBar) adminBar.style.display = 'block';
     isEditMapMode = true;
 }
 
