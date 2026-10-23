@@ -358,6 +358,11 @@
             <p style="font-size:12px; color:#81c784; margin-bottom:12px;">🖐 Перемещение: перетаскивайте машинку прямо по схеме!</p>
             
             <div class="input-group">
+                 <label>Номер парковочного места (№):</label>
+                <input type="number" id="spotIdInput" min="1" max="9999" placeholder="напр. 15">
+            </div>
+
+            <div class="input-group">
                 <label>Угол ориентации (градусы):</label>
                 <div style="display:flex; gap:8px; align-items:center;">
                     <input type="number" id="spotAngleNumInput" min="-180" max="180" value="0" style="width:110px;" oninput="onAngleNumInput(this.value)">
