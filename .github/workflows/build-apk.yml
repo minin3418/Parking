@@ -89,6 +89,40 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Copy of every main build in minin3418/Parking-apk (needs APK_REPO_TOKEN with
+      # Contents: write on that repo; skipped while the secret is not set)
+      - name: Prepare APK repo release info
+        id: apkrel
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          APK_REPO_TOKEN: ${{ secrets.APK_REPO_TOKEN }}
+        run: |
+          if [ -z "$APK_REPO_TOKEN" ]; then
+            echo "APK_REPO_TOKEN is not set - skipping publish to Parking-apk"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            git log -1 --format='%s%n%n%b'
+            echo "Commit: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish APK to Parking-apk
+        if: steps.apkrel.outputs.enabled == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: minin3418/Parking-apk
+          token: ${{ secrets.APK_REPO_TOKEN }}
+          tag_name: build-${{ github.run_number }}
+          name: Сборка ${{ github.run_number }} (${{ steps.apkrel.outputs.short_sha }})
+          body: ${{ steps.apkrel.outputs.body }}
+          files: build-artifacts/dvor-parking.apk
+          make_latest: 'true'
+
       - name: Release APK on Tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
