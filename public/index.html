@@ -978,17 +978,27 @@
           }
         })
         .catch(() => {
-          // If offline or github raw fallback:
-          fetch('https://raw.githubusercontent.com/minin3418/Parking/main/database.json')
-            .then(r => r.json())
+          // No backend: load this yard's own schema file from GitHub (contents API is not CDN-cached)
+          const yardIdAtRequest = currentYardId;
+          fetch(githubYardFileUrl(yardIdAtRequest) + '?ref=main&t=' + Date.now(), {
+            headers: { 'Accept': 'application/vnd.github.raw+json' },
+            cache: 'no-store'
+          })
+            .then(r => r.ok ? r.json() : null)
             .then(data => {
-              if (data && data.spots && currentYardId === 'karbysheva22') {
+              if (data && data.spots && data.spots.length && currentYardId === yardIdAtRequest) {
                 yardData = data;
                 saveYardData(currentYardId, yardData);
                 renderAll();
               }
             }).catch(() => {});
         });
+    }
+
+    // Same file names as the Android app: yards/<appYardId>.json
+    function githubYardFileUrl(yardId) {
+      const appYardId = yardId === 'karbysheva22' ? 'karbysheva_22' : yardId;
+      return 'https://api.github.com/repos/minin3418/Parking/contents/yards/' + encodeURIComponent(appYardId + '.json');
     }
 
     function populateYardDropdown() {
@@ -1562,12 +1572,14 @@
         const p3 = 'l7Cz9HROhd2Z9011x7v';
         token = p1 + p2 + p3;
       }
+      const fileUrl = githubYardFileUrl(currentYardId);
       try {
-        const getRes = await fetch('https://api.github.com/repos/minin3418/Parking/contents/database.json', {
+        const getRes = await fetch(fileUrl + '?ref=main', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/vnd.github.v3+json'
-          }
+          },
+          cache: 'no-store'
         });
         let sha = '';
         if (getRes.ok) {
@@ -1578,7 +1590,7 @@
         const jsonStr = JSON.stringify(yardData, null, 2);
         const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
 
-        const putRes = await fetch('https://api.github.com/repos/minin3418/Parking/contents/database.json', {
+        const putRes = await fetch(fileUrl, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -1586,8 +1598,9 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            message: 'Обновление схемы двора из веб-версии',
+            message: 'Обновление схемы двора (' + currentYardId + ') из веб-версии',
             content: b64,
+            branch: 'main',
             sha: sha || undefined
           })
         });

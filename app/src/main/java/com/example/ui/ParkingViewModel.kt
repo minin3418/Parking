@@ -249,11 +249,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             }
             updateKnownYardsSummary(yardId, yardData)
 
-            // If it's master Karbysheva yard and user triggered refresh, check GitHub repository database.json
-            if (isRefresh && YardTemplates.isMasterKarbyshevaYard(yardId)) {
+            // On refresh, pull this yard's own schema file (yards/<yardId>.json) from GitHub
+            if (isRefresh) {
                 try {
-                    val remoteMaster = api.getMasterDatabase()
-                    if (remoteMaster.spots.isNotEmpty()) {
+                    val remoteMaster = ParkingApiClient.loadYardFromGitHub(yardId)
+                    if (remoteMaster != null && remoteMaster.spots.isNotEmpty()) {
                         // Preserve current local occupants
                         val currentOccupants = yardData.spots.filter { s -> s.occupiedBy != null }.associateBy { s -> s.id }
                         val mergedSpots = remoteMaster.spots.map { s ->
@@ -265,8 +265,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                             blockers = if (yardData.blockers.isNotEmpty()) yardData.blockers else remoteMaster.blockers
                         )
                         saveYardLocally(yardId, merged)
-                        _uiState.update { it.copy(data = merged) }
-                        updateKnownYardsSummary(yardId, merged)
+                        // The user may have switched yards while the request was in flight
+                        if (_uiState.value.currentYardId == yardId) {
+                            _uiState.update { it.copy(data = merged) }
+                            updateKnownYardsSummary(yardId, merged)
+                        }
                     }
                 } catch (_: Exception) {
                     // Graceful offline behavior - localData remains authoritative
@@ -1093,6 +1096,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             val token = tokenOverride?.trim()?.ifBlank { null } ?: prefs.githubToken
             val result = ParkingApiClient.saveToGitHub(
                 token = token,
+                yardId = _uiState.value.currentYardId,
                 data = currentData,
                 commitMessage = "Обновление схемы двора (${_uiState.value.currentYardAddress}) из приложения"
             )
@@ -1118,9 +1122,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val remoteData = api.getMasterDatabase()
-                if (remoteData.spots.isNotEmpty()) {
-                    val currentYardId = _uiState.value.currentYardId
+                val currentYardId = _uiState.value.currentYardId
+                val remoteData = ParkingApiClient.loadYardFromGitHub(currentYardId)
+                if (remoteData != null && remoteData.spots.isNotEmpty()) {
                     saveYardLocally(currentYardId, remoteData)
                     updateKnownYardsSummary(currentYardId, remoteData)
                     _uiState.update {

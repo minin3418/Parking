@@ -102,8 +102,43 @@ object ParkingApiClient {
         }
     }
 
+    // Each yard has its own file in the repo, so saving one yard never overwrites another
+    private fun yardContentsUrl(yardId: String): okhttp3.HttpUrl =
+        okhttp3.HttpUrl.Builder()
+            .scheme("https")
+            .host("api.github.com")
+            .addPathSegments("repos/minin3418/Parking/contents/yards")
+            .addPathSegment("$yardId.json")
+            .build()
+
+    /**
+     * Loads yard schema via GitHub contents API (not raw.githubusercontent.com, which is CDN-cached ~5 min).
+     * Returns null when the yard has no file in the repository yet.
+     */
+    suspend fun loadYardFromGitHub(yardId: String): ParkingData? {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val url = yardContentsUrl(yardId).newBuilder()
+                .addQueryParameter("ref", "main")
+                .addQueryParameter("t", System.currentTimeMillis().toString())
+                .build()
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("Accept", "application/vnd.github.raw+json")
+                .header("Cache-Control", "no-cache")
+                .get()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.code == 404) return@use null
+                if (!response.isSuccessful) throw Exception("GitHub API (${response.code})")
+                val body = response.body?.string().orEmpty()
+                moshi.adapter(ParkingData::class.java).fromJson(body)
+            }
+        }
+    }
+
     suspend fun saveToGitHub(
         token: String,
+        yardId: String,
         data: ParkingData,
         commitMessage: String = "Обновление схемы двора из приложения"
     ): Result<String> {
@@ -115,10 +150,12 @@ object ParkingApiClient {
                 }
 
                 val client = okHttpClient
+                val fileUrl = yardContentsUrl(yardId)
                 val getRequest = okhttp3.Request.Builder()
-                    .url("https://api.github.com/repos/minin3418/Parking/contents/database.json")
+                    .url(fileUrl.newBuilder().addQueryParameter("ref", "main").build())
                     .header("Authorization", "Bearer $cleanToken")
                     .header("Accept", "application/vnd.github.v3+json")
+                    .header("Cache-Control", "no-cache")
                     .get()
                     .build()
 
@@ -126,8 +163,7 @@ object ParkingApiClient {
                 client.newCall(getRequest).execute().use { response ->
                     if (response.isSuccessful) {
                         val body = response.body?.string() ?: ""
-                        val match = Regex("\"sha\"\\s*:\\s*\"([^\"]+)\"").find(body)
-                        currentSha = match?.groupValues?.get(1)
+                        currentSha = org.json.JSONObject(body).optString("sha").ifBlank { null }
                     }
                 }
 
@@ -137,20 +173,17 @@ object ParkingApiClient {
                     android.util.Base64.NO_WRAP
                 )
 
-                val putJson = buildString {
-                    append("{")
-                    append("\"message\": \"").append(commitMessage).append("\",")
-                    append("\"content\": \"").append(base64Content).append("\"")
-                    if (!currentSha.isNullOrBlank()) {
-                        append(",\"sha\": \"").append(currentSha).append("\"")
-                    }
-                    append("}")
-                }
+                val putJson = org.json.JSONObject().apply {
+                    put("message", commitMessage)
+                    put("content", base64Content)
+                    put("branch", "main")
+                    if (!currentSha.isNullOrBlank()) put("sha", currentSha)
+                }.toString()
 
                 val putBody = putJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
 
                 val putRequest = okhttp3.Request.Builder()
-                    .url("https://api.github.com/repos/minin3418/Parking/contents/database.json")
+                    .url(fileUrl)
                     .header("Authorization", "Bearer $cleanToken")
                     .header("Accept", "application/vnd.github.v3+json")
                     .put(putBody)

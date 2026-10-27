@@ -3,6 +3,10 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
+    # Yard schema saves from the app only touch data files - no need to rebuild the APK
+    paths-ignore:
+      - 'yards/**'
+      - 'database.json'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
