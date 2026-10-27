@@ -172,7 +172,7 @@
 
     .btn:disabled { opacity: 0.5; cursor: default; }
 
-    @media (max-width: 420px) {
+    @media (max-width: 600px) {
       .btn-label { display: none; }
     }
 
@@ -756,6 +756,63 @@
     .svg-blocker-car {
       cursor: pointer;
     }
+
+    /* Schema editor (admin) */
+    .edit-item { cursor: move; }
+    #edit-bar {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: #1E1420;
+      border-top: 1px solid #E91E63;
+      padding: 10px calc(12px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(12px + var(--safe-left));
+      z-index: 80;
+    }
+    body.editing #edit-bar { display: flex; }
+    body.editing .bottom-bar, body.editing .stats-bar { display: none; }
+    .edit-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .edit-row .btn { flex: 1 1 auto; }
+    #edit-selection-label { font-size: 12px; font-weight: 700; color: #FF80AB; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .btn-pink { background: #E91E63; color: white; }
+    .btn-danger { background: rgba(255, 82, 82, 0.15); color: var(--yard-red); border: 1px solid rgba(255, 82, 82, 0.5); }
+    #edit-banner {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: calc(100% - 24px);
+      background: rgba(233, 30, 99, 0.92);
+      color: white;
+      padding: 6px 14px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 60;
+      pointer-events: none;
+    }
+    body.editing #edit-banner { display: block; }
+
+    /* Share / QR */
+    .qr-box {
+      align-self: center;
+      background: #FFFFFF;
+      padding: 12px;
+      border-radius: 14px;
+      width: min(260px, 100%);
+    }
+    .qr-box svg { display: block; width: 100%; height: auto; }
+    .share-url {
+      font-size: 12px;
+      color: var(--text-muted);
+      word-break: break-all;
+      text-align: center;
+    }
+    .check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+    .check-row input { accent-color: var(--yard-green); width: 18px; height: 18px; }
+    .btn-row { display: flex; gap: 8px; }
+    .btn-row .btn { flex: 1; padding: 12px; }
   </style>
 </head>
 <body>
@@ -764,6 +821,7 @@
   <div id="admin-toolbar">
     <span>🔧 РЕЖИМ АДМИНИСТРАТОРА</span>
     <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+      <button class="btn btn-sm btn-pink" onclick="startEditing()">✏️ Редактор схемы</button>
       <button class="btn btn-sm btn-outline" onclick="adminClearSpots()">🧹 Очистить места</button>
       <button class="btn btn-sm btn-amber" onclick="exitAdmin()">Выйти</button>
     </div>
@@ -786,6 +844,7 @@
     <div class="header-actions">
       <button id="btn-install" class="btn btn-sm btn-outline" onclick="createShortcut()" title="Создать ярлык на экране телефона" hidden>📲<span class="btn-label"> Создать ярлык</span></button>
       <button class="btn btn-sm btn-outline" onclick="openQuickLeaveModal()" title="Быстро освободить место">⚡<span class="btn-label"> Я уезжаю</span></button>
+      <button class="btn btn-sm btn-outline" onclick="openShareModal()" title="Поделиться: QR-код и ссылка">🔗<span class="btn-label"> QR</span></button>
       <a id="apk-link" href="https://github.com/minin3418/Parking-apk/releases/latest/download/dvor-parking.apk" class="btn btn-sm btn-download-apk" title="Скачать Android APK" hidden>📥<span class="btn-label"> APK</span></a>
       <button class="btn btn-sm btn-outline" onclick="openAdminModal()" title="Администратор">⚙️</button>
     </div>
@@ -843,6 +902,7 @@
       </svg>
 
       <div id="map-empty" class="map-empty" hidden></div>
+      <div id="edit-banner">Перетаскивайте места и подписи · нажмите, чтобы выбрать</div>
 
       <div class="map-controls">
         <button class="map-ctrl-btn" onclick="zoomMap(1.25)" title="Приблизить">+</button>
@@ -889,7 +949,91 @@
     </button>
   </div>
 
+  <!-- Schema editor bar (admin), replaces the bottom bar while editing -->
+  <div id="edit-bar">
+    <div id="edit-selected-tools" class="edit-row">
+      <span id="edit-selection-label"></span>
+      <button id="edit-rot-left" class="btn btn-sm btn-outline" onclick="rotateSelected(-15)" title="Повернуть против часовой">↺ 15°</button>
+      <button id="edit-rot-right" class="btn btn-sm btn-outline" onclick="rotateSelected(15)" title="Повернуть по часовой">↻ 15°</button>
+      <button id="edit-duplicate" class="btn btn-sm btn-outline" onclick="duplicateSelected()" title="Добавить такое же место рядом">⧉ Копия</button>
+      <button id="edit-rename" class="btn btn-sm btn-outline" onclick="renameSelected()">✎ Номер</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteSelected()">🗑</button>
+    </div>
+    <div class="edit-row">
+      <button class="btn btn-sm btn-outline" onclick="addSpot()">＋ Место</button>
+      <button class="btn btn-sm btn-outline" onclick="openAddRow()">＋ Ряд</button>
+      <button class="btn btn-sm btn-outline" onclick="addLandmark()">＋ Подпись</button>
+    </div>
+    <div class="edit-row">
+      <button class="btn btn-sm btn-outline" onclick="cancelEditing()">Отмена</button>
+      <button class="btn btn-sm btn-green" onclick="saveEditing()">💾 Сохранить для всех</button>
+    </div>
+  </div>
+
   <div id="toast"></div>
+
+  <!-- MODAL: Share (QR code and link) -->
+  <div id="modal-share" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>🔗 Поделиться</h2>
+        <button class="close-btn" onclick="closeModal('modal-share')">✕</button>
+      </div>
+      <p class="hint-text">Покажите соседу QR-код — он откроет парковку камерой телефона.</p>
+      <div id="share-qr" class="qr-box"></div>
+      <label id="share-yard-row" class="check-row">
+        <input type="checkbox" id="share-with-yard" checked onchange="renderShare()">
+        <span>Сразу открыть двор <b id="share-yard-name"></b></span>
+      </label>
+      <div id="share-url" class="share-url"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="copyShareLink()">📋 Скопировать</button>
+        <button id="btn-native-share" class="btn btn-green" onclick="nativeShare()">📤 Отправить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: one text/number field (spot number, label text) -->
+  <div id="modal-edit-input" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="edit-input-title"></h2>
+        <button class="close-btn" onclick="closeModal('modal-edit-input')">✕</button>
+      </div>
+      <div class="form-group">
+        <label id="edit-input-label"></label>
+        <input type="text" id="edit-input-value" class="form-control" autocomplete="off">
+      </div>
+      <button class="btn btn-green" style="padding: 12px;" onclick="submitEditInput()">Готово</button>
+    </div>
+  </div>
+
+  <!-- MODAL: add a row of spots -->
+  <div id="modal-add-row" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>＋ Ряд мест</h2>
+        <button class="close-btn" onclick="closeModal('modal-add-row')">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Сколько мест</label>
+        <input type="number" id="row-count" class="form-control" inputmode="numeric" min="1" max="40" value="6">
+      </div>
+      <div class="form-group">
+        <label>Номер первого места</label>
+        <input type="number" id="row-first" class="form-control" inputmode="numeric" min="1">
+      </div>
+      <div class="form-group">
+        <label>Наклон мест, градусы (0 — прямо, например −18 или 22 — ёлочкой)</label>
+        <input type="number" id="row-angle" class="form-control" inputmode="numeric" value="0">
+      </div>
+      <div class="form-group">
+        <label>Шаг между местами (44 — плотно, 58 — свободно)</label>
+        <input type="number" id="row-step" class="form-control" inputmode="numeric" value="50">
+      </div>
+      <button class="btn btn-green" style="padding: 12px;" onclick="submitAddRow()">Добавить ряд</button>
+    </div>
+  </div>
 
   <!-- MODAL: Yard picker -->
   <div id="modal-yards" class="modal-overlay">
@@ -1126,6 +1270,7 @@
     </div>
   </div>
 
+  <script src="vendor/qrcode.js"></script>
   <script>
     /* =====================================================================
        SHARED DATABASE (Firebase Realtime Database, same layout as the Android app's ParkingCloud):
@@ -1343,6 +1488,12 @@
     let isAdminMode = false;
     let isFirstLaunch = false;
 
+    // Schema editor: working copy of the schema while the admin edits it (null otherwise)
+    let editDraft = null;            // { spots: [{id, x, y, angle, orig}], landmarks: [...] }
+    let editSelection = null;        // { kind: 'spot' | 'landmark', id }
+    let editDrag = null;
+    let editDirty = false;
+
     let scale = 1;
     let panX = 0;
     let panY = 0;
@@ -1468,14 +1619,17 @@
       setupPlatformUi();
       buildTemplateOptions();
 
-      const active = readJson('dvor_active_yard', null);
-      if (active && active.id) {
-        openYard(active.id, active.address, null);
-      } else {
-        isFirstLaunch = true;
-        renderAll();
-        openYardPicker();
-      }
+      openYardFromLink().then(opened => {
+        if (opened) return;
+        const active = readJson('dvor_active_yard', null);
+        if (active && active.id) {
+          openYard(active.id, active.address, null);
+        } else {
+          isFirstLaunch = true;
+          renderAll();
+          openYardPicker();
+        }
+      });
       syncSharedYards();
     });
 
@@ -1493,6 +1647,7 @@
      * A yard created on this device is published on its first connection.
      */
     function openYard(yardId, address) {
+      if (editDraft) stopEditing();
       if (yardData && currentYard) saveYardData(currentYard.id, yardData);
 
       const local = loadLocalYard(yardId);
@@ -1774,6 +1929,11 @@
       empty.textContent = emptyMessage || '';
       if (!yardData) return;
 
+      if (editDraft) {
+        renderEditMap(landmarksLayer, spotsLayer);
+        return;
+      }
+
       const blockers = yardData.blockers || [];
       const spots = yardData.spots || [];
 
@@ -1938,7 +2098,7 @@
       const viewport = document.getElementById('map-viewport');
 
       viewport.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.svg-stall') || e.target.closest('.svg-blocker-car')) return;
+        if (e.target.closest('.svg-stall') || e.target.closest('.svg-blocker-car') || e.target.closest('.edit-item')) return;
         isPanning = true;
         viewport.classList.add('grabbing');
         startX = e.clientX - panX;
@@ -1984,6 +2144,7 @@
       }, { passive: true });
 
       viewport.addEventListener('touchmove', (e) => {
+        if (editDrag) return;
         if (e.touches.length === 1) {
           panX = e.touches[0].clientX - touchStartX;
           panY = e.touches[0].clientY - touchStartY;
@@ -1998,10 +2159,35 @@
         }
       }, { passive: true });
 
-      // After a pinch, continue panning with the remaining finger without a jump
+      // After a pinch (or a drag in the editor), continue panning with the remaining finger without a jump
       viewport.addEventListener('touchend', (e) => {
         if (e.touches.length === 1) startPan(e.touches[0]);
       }, { passive: true });
+
+      // Schema editor: drag spots and labels, tap empty space to deselect
+      let downX = 0, downY = 0;
+      viewport.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; });
+      viewport.addEventListener('click', (e) => {
+        if (!editDraft || e.target.closest('.edit-item')) return;
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) < 6) selectEditItem(null);
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!editDrag) return;
+        const p = svgPoint(e.clientX, e.clientY);
+        const item = findEditItem(editDrag.kind, editDrag.id);
+        if (!item) return;
+        if (!editDrag.moved && Math.hypot(e.clientX - editDrag.clientX, e.clientY - editDrag.clientY) < 4) return;
+        editDrag.moved = true;
+        item.x = Math.round(Math.min(Math.max(editDrag.itemX + p.x - editDrag.startX, 0), 960));
+        item.y = Math.round(Math.min(Math.max(editDrag.itemY + p.y - editDrag.startY, 0), 440));
+        editDirty = true;
+        // Move the element itself: re-rendering would drop the element under the finger
+        const el = document.querySelector(`.edit-item[data-kind="${editDrag.kind}"][data-id="${CSS.escape(String(editDrag.id))}"]`);
+        if (el) el.setAttribute('transform', editItemTransform(editDrag.kind, item));
+      });
+      const endDrag = () => { editDrag = null; };
+      window.addEventListener('pointerup', endDrag);
+      window.addEventListener('pointercancel', endDrag);
 
       // iOS Safari ignores user-scalable=no; block page pinch-zoom outside the map
       document.addEventListener('gesturestart', (e) => e.preventDefault());
@@ -2388,6 +2574,8 @@
     }
 
     function exitAdmin() {
+      if (editDraft && editDirty && !confirm('Выйти без сохранения изменений схемы?')) return;
+      if (editDraft) stopEditing();
       isAdminMode = false;
       document.getElementById('admin-toolbar').classList.remove('active');
     }
@@ -2403,6 +2591,404 @@
       yardData.blockers = [];
       persist();
       if (Object.keys(updates).length) pushToCloud('Нет связи: изменения не видны соседям', id => patchYard(id, updates));
+    }
+
+    /* =====================================================================
+       SCHEMA EDITOR (admin) - edits a copy, "Сохранить" publishes it to
+       yards/<id>/schema; live updates keep coming but don't touch the copy.
+       Spots remember their original number (orig), so on save the cars
+       parked there and the 2nd-row links follow a renumbered spot.
+       ===================================================================== */
+    function startEditing() {
+      if (!currentYard || !yardData) return;
+      editDraft = {
+        spots: yardData.spots.map(s => ({ id: s.id, x: s.x, y: s.y, angle: s.angle || 0, orig: s.id })),
+        landmarks: yardData.landmarks.map(l => ({ id: l.id, text: l.text, x: l.x, y: l.y }))
+      };
+      editSelection = null;
+      editDirty = false;
+      cancelRow2Mode();
+      switchView('map');
+      document.body.classList.add('editing');
+      updateEditTools();
+      renderMap();
+      resetMapTransform();
+    }
+
+    function stopEditing() {
+      editDraft = null;
+      editSelection = null;
+      editDrag = null;
+      editDirty = false;
+      document.body.classList.remove('editing');
+      renderAll();
+      resetMapTransform();
+    }
+
+    function cancelEditing() {
+      if (editDirty && !confirm('Отменить изменения схемы?')) return;
+      stopEditing();
+    }
+
+    function findEditItem(kind, id) {
+      if (!editDraft) return null;
+      return (kind === 'spot' ? editDraft.spots : editDraft.landmarks).find(i => i.id === id) || null;
+    }
+
+    function editItemTransform(kind, item) {
+      return kind === 'spot' ? `translate(${item.x}, ${item.y}) rotate(${item.angle || 0})` : `translate(${item.x}, ${item.y})`;
+    }
+
+    /** Client (screen) point -> 960x440 map coordinates, taking zoom and pan into account. */
+    function svgPoint(clientX, clientY) {
+      const rect = document.getElementById('yard-svg').getBoundingClientRect();
+      const w = rect.width / scale, h = rect.height / scale;
+      const base = Math.min(w / 960, h / 440);
+      const offX = (w - 960 * base) / 2, offY = (h - 440 * base) / 2;
+      return {
+        x: ((clientX - rect.left) / scale - offX) / base,
+        y: ((clientY - rect.top) / scale - offY) / base
+      };
+    }
+
+    /** Map point in the middle of what is on screen now - where new items appear. */
+    function viewCenter() {
+      const rect = document.getElementById('map-viewport').getBoundingClientRect();
+      const p = svgPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return { x: Math.round(Math.min(Math.max(p.x, 40), 920)), y: Math.round(Math.min(Math.max(p.y, 40), 400)) };
+    }
+
+    function renderEditMap(landmarksLayer, spotsLayer) {
+      const occupied = new Set(yardData.spots.filter(s => s.occupiedBy).map(s => s.id));
+      const isSel = (kind, id) => editSelection && editSelection.kind === kind && editSelection.id === id;
+      const makeItem = (kind, item, html) => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'edit-item');
+        g.dataset.kind = kind;
+        g.dataset.id = String(item.id);
+        g.setAttribute('transform', editItemTransform(kind, item));
+        g.innerHTML = html;
+        g.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          const p = svgPoint(e.clientX, e.clientY);
+          editDrag = { kind: kind, id: item.id, startX: p.x, startY: p.y, itemX: item.x, itemY: item.y, clientX: e.clientX, clientY: e.clientY, moved: false };
+          if (!isSel(kind, item.id)) selectEditItem({ kind: kind, id: item.id });
+        });
+        return g;
+      };
+
+      editDraft.landmarks.forEach(lm => {
+        const text = lm.text || 'Объект';
+        const pillW = Math.max(44, text.length * 7 + 20);
+        const sel = isSel('landmark', lm.id);
+        landmarksLayer.appendChild(makeItem('landmark', lm, `
+          <rect x="${-pillW / 2}" y="-15" width="${pillW}" height="22" rx="6" fill="${sel ? 'rgba(233,30,99,0.5)' : 'rgba(38,50,56,0.9)'}" stroke="${sel ? '#FF4081' : '#FFC107'}" stroke-width="${sel ? 2.5 : 1}" ${sel ? '' : 'stroke-dasharray="4 4"'} />
+          <text x="0" y="0" fill="${sel ? '#FFF' : '#FFD54F'}" font-size="12" font-weight="700" text-anchor="middle">${esc(text)}</text>
+        `));
+      });
+
+      editDraft.spots.forEach(spot => {
+        const sel = isSel('spot', spot.id);
+        const busy = spot.orig != null && occupied.has(spot.orig);
+        spotsLayer.appendChild(makeItem('spot', spot, `
+          <rect x="-18" y="-32" width="36" height="64" rx="6" fill="${sel ? 'rgba(233,30,99,0.45)' : busy ? 'rgba(198,40,40,0.55)' : 'rgba(0,230,118,0.15)'}" stroke="${sel ? '#FF4081' : busy ? '#FF7961' : '#00E676'}" stroke-width="${sel ? 3.5 : 2}" />
+          <line x1="-10" y1="-26" x2="10" y2="-26" stroke="${sel ? '#FF4081' : 'rgba(255,255,255,0.35)'}" stroke-width="2" stroke-linecap="round" />
+          <text x="0" y="4" fill="#FFF" font-size="12" font-weight="700" text-anchor="middle">№${spot.id}</text>
+        `));
+      });
+    }
+
+    function selectEditItem(selection) {
+      editSelection = selection;
+      updateEditTools();
+      renderMap();
+    }
+
+    /* The tool row keeps its size whatever is selected: a jumping bar would resize and shift the map. */
+    function updateEditTools() {
+      const isSpot = !!editSelection && editSelection.kind === 'spot';
+      const item = editSelection && findEditItem(editSelection.kind, editSelection.id);
+      document.getElementById('edit-selection-label').textContent = !editSelection
+        ? 'Нажмите на место или подпись, чтобы изменить'
+        : isSpot ? `Место №${editSelection.id} · наклон ${item ? item.angle || 0 : 0}°` : `Подпись «${item ? item.text : ''}»`;
+      document.querySelectorAll('#edit-selected-tools .btn').forEach(btn => { btn.disabled = !editSelection; });
+      ['edit-rot-left', 'edit-rot-right', 'edit-duplicate'].forEach(id => {
+        document.getElementById(id).disabled = !isSpot;
+      });
+      document.getElementById('edit-rename').textContent = editSelection && !isSpot ? '✎ Текст' : '✎ Номер';
+    }
+
+    function nextSpotId() {
+      return editDraft.spots.reduce((max, s) => Math.max(max, s.id), 0) + 1;
+    }
+
+    function addSpot() {
+      const c = viewCenter();
+      const spot = { id: nextSpotId(), x: c.x, y: c.y, angle: 0, orig: null };
+      editDraft.spots.push(spot);
+      editDirty = true;
+      selectEditItem({ kind: 'spot', id: spot.id });
+      showToast(`Место №${spot.id} добавлено в центр экрана — перетащите его`);
+    }
+
+    function duplicateSelected() {
+      const src = editSelection && findEditItem('spot', editSelection.id);
+      if (!src || editSelection.kind !== 'spot') return;
+      const rad = (src.angle || 0) * Math.PI / 180;
+      const step = 50;
+      const spot = {
+        id: nextSpotId(),
+        x: Math.round(Math.min(src.x + Math.cos(rad) * step, 940)),
+        y: Math.round(Math.min(Math.max(src.y + Math.sin(rad) * step, 0), 440)),
+        angle: src.angle || 0,
+        orig: null
+      };
+      editDraft.spots.push(spot);
+      editDirty = true;
+      selectEditItem({ kind: 'spot', id: spot.id });
+    }
+
+    function openAddRow() {
+      document.getElementById('row-first').value = nextSpotId();
+      openModal('modal-add-row');
+    }
+
+    function submitAddRow() {
+      const count = parseInt(document.getElementById('row-count').value, 10);
+      const first = parseInt(document.getElementById('row-first').value, 10);
+      const angle = parseFloat(document.getElementById('row-angle').value) || 0;
+      const step = parseFloat(document.getElementById('row-step').value) || 50;
+      if (!(count >= 1 && count <= 40)) return showToast('Количество мест: от 1 до 40', true);
+      if (!(first >= 1)) return showToast('Укажите номер первого места', true);
+      const ids = Array.from({ length: count }, (_, i) => first + i);
+      const taken = ids.filter(id => editDraft.spots.some(s => s.id === id));
+      if (taken.length) return showToast('Номера уже есть на схеме: ' + taken.slice(0, 5).map(n => '№' + n).join(', '), true);
+
+      // The row runs to the right from the middle of the screen, stalls tilted by the angle
+      const c = viewCenter();
+      const startX = Math.max(30, Math.round(c.x - (count - 1) * step / 2));
+      ids.forEach((id, i) => {
+        editDraft.spots.push({ id: id, x: Math.min(Math.round(startX + i * step), 940), y: c.y, angle: angle, orig: null });
+      });
+      editDirty = true;
+      closeModal('modal-add-row');
+      selectEditItem(null);
+      showToast(`Добавлено мест: ${count}`);
+    }
+
+    let editInputHandler = null;
+
+    function askEditInput(title, label, value, numeric, onSubmit) {
+      document.getElementById('edit-input-title').textContent = title;
+      document.getElementById('edit-input-label').textContent = label;
+      const input = document.getElementById('edit-input-value');
+      input.value = value;
+      input.inputMode = numeric ? 'numeric' : 'text';
+      editInputHandler = onSubmit;
+      openModal('modal-edit-input');
+      setTimeout(() => input.focus(), 50);
+    }
+
+    function submitEditInput() {
+      const value = document.getElementById('edit-input-value').value.trim();
+      if (editInputHandler && editInputHandler(value) !== false) closeModal('modal-edit-input');
+    }
+
+    function addLandmark() {
+      askEditInput('＋ Подпись на схеме', 'Текст (например: Въезд, Шлагбаум, Дом 5)', '', false, text => {
+        if (!text) { showToast('Введите текст', true); return false; }
+        const c = viewCenter();
+        const lm = { id: 'lm_' + Date.now(), text: text.slice(0, 60), x: c.x, y: c.y };
+        editDraft.landmarks.push(lm);
+        editDirty = true;
+        selectEditItem({ kind: 'landmark', id: lm.id });
+      });
+    }
+
+    function renameSelected() {
+      if (!editSelection) return;
+      const item = findEditItem(editSelection.kind, editSelection.id);
+      if (!item) return;
+      if (editSelection.kind === 'landmark') {
+        askEditInput('Текст подписи', 'Новый текст', item.text, false, text => {
+          if (!text) { showToast('Введите текст', true); return false; }
+          item.text = text.slice(0, 60);
+          editDirty = true;
+          selectEditItem(editSelection);
+        });
+        return;
+      }
+      askEditInput(`Номер места №${item.id}`, 'Новый номер', String(item.id), true, value => {
+        const id = parseInt(value, 10);
+        if (!(id >= 1 && String(id) === value)) { showToast('Номер — целое число от 1', true); return false; }
+        if (id !== item.id && editDraft.spots.some(s => s.id === id)) { showToast(`Место №${id} уже есть на схеме`, true); return false; }
+        item.id = id;
+        editDirty = true;
+        selectEditItem({ kind: 'spot', id: id });
+      });
+    }
+
+    function rotateSelected(delta) {
+      const item = editSelection && editSelection.kind === 'spot' && findEditItem('spot', editSelection.id);
+      if (!item) return;
+      let angle = ((item.angle || 0) + delta) % 360;
+      if (angle > 180) angle -= 360;
+      if (angle <= -180) angle += 360;
+      item.angle = angle;
+      editDirty = true;
+      selectEditItem(editSelection);
+    }
+
+    function deleteSelected() {
+      if (!editSelection) return;
+      if (editSelection.kind === 'spot') {
+        const item = findEditItem('spot', editSelection.id);
+        const busy = item && item.orig != null && yardData.spots.some(s => s.id === item.orig && s.occupiedBy);
+        if (busy && !confirm(`Место №${item.id} сейчас занято. Удалить его вместе с отметкой?`)) return;
+        editDraft.spots = editDraft.spots.filter(s => s.id !== editSelection.id);
+      } else {
+        editDraft.landmarks = editDraft.landmarks.filter(l => l.id !== editSelection.id);
+      }
+      editDirty = true;
+      selectEditItem(null);
+    }
+
+    /**
+     * One multi-path PATCH: the new schema, plus cars and 2nd-row links moved to renumbered
+     * spots and dropped for deleted ones. Uses the live occupancy as of now, not as of editing start.
+     */
+    function saveEditing() {
+      if (!editDraft || !currentYard) return;
+      const draft = editDraft;
+      const updates = { schema: schemaOf(draft) };
+
+      const newIdByOrig = {};
+      draft.spots.forEach(s => { if (s.orig != null) newIdByOrig[s.orig] = s.id; });
+
+      const oldOccupied = yardData.spots.filter(s => s.occupiedBy);
+      const newOccupancy = {};
+      oldOccupied.forEach(s => {
+        if (newIdByOrig[s.id] != null) newOccupancy[newIdByOrig[s.id]] = s.occupiedBy;
+      });
+      oldOccupied.forEach(s => {
+        if (!(s.id in newOccupancy)) updates['occupancy/s' + s.id] = null;
+      });
+      Object.entries(newOccupancy).forEach(([id, occ]) => {
+        const old = yardData.spots.find(s => s.id === Number(id));
+        if (!old || old.occupiedBy !== occ) updates['occupancy/s' + id] = occ;
+      });
+
+      (yardData.blockers || []).forEach(b => {
+        const before = b.blockedSpots || [];
+        const after = before.map(id => newIdByOrig[id]).filter(id => id != null);
+        if (!after.length) updates['blockers/' + b.id] = null;
+        else if (after.join(',') !== before.join(',')) updates['blockers/' + b.id + '/blockedSpots'] = after;
+      });
+
+      // Optimistic local copy; the live connection brings the confirmed state right after
+      const occupantOf = id => newOccupancy[id] || null;
+      yardData = Object.assign({}, yardData, {
+        spots: draft.spots.map(s => ({ id: s.id, x: s.x, y: s.y, angle: s.angle || 0, occupiedBy: occupantOf(s.id) })),
+        landmarks: draft.landmarks.map(l => ({ id: l.id, text: l.text, x: l.x, y: l.y })),
+        blockers: (yardData.blockers || [])
+          .map(b => Object.assign({}, b, { blockedSpots: (b.blockedSpots || []).map(id => newIdByOrig[id]).filter(id => id != null) }))
+          .filter(b => b.blockedSpots.length)
+      });
+      saveYardData(currentYard.id, yardData);
+      stopEditing();
+
+      const yardId = currentYard.id;
+      patchYard(yardId, updates)
+        .then(() => showToast('Схема сохранена и видна всем'))
+        .catch(() => {
+          showToast('Нет связи: схема не сохранена', true);
+          loadCloudYard(yardId).then(cloud => {
+            if (cloud && currentYard && currentYard.id === yardId) {
+              yardData = cloud;
+              saveYardData(yardId, cloud);
+              renderAll();
+            }
+          }).catch(() => {});
+        });
+    }
+
+    /* =====================================================================
+       SHARE: QR code and link (optionally straight to the current yard: ?yard=<id>)
+       ===================================================================== */
+    const SITE_URL = 'https://minin3418.github.io/Parking/';
+
+    function shareUrl() {
+      const withYard = currentYard && document.getElementById('share-with-yard').checked;
+      return withYard ? SITE_URL + '?yard=' + encodeURIComponent(currentYard.id) : SITE_URL;
+    }
+
+    function openShareModal() {
+      document.getElementById('share-yard-row').hidden = !currentYard;
+      document.getElementById('share-yard-name').textContent = currentYard ? currentYard.address : '';
+      document.getElementById('btn-native-share').hidden = !navigator.share;
+      renderShare();
+      openModal('modal-share');
+    }
+
+    function renderShare() {
+      const url = shareUrl();
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      document.getElementById('share-qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+      document.getElementById('share-url').textContent = decodeURIComponent(url);
+    }
+
+    async function copyShareLink() {
+      const url = shareUrl();
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast('Ссылка скопирована');
+      } catch (e) {
+        // Old browsers / no permission: select the text so it can be copied by hand
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById('share-url'));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        showToast('Выделите и скопируйте ссылку', true);
+      }
+    }
+
+    async function nativeShare() {
+      try {
+        await navigator.share({ title: 'Двор: Парковка', text: 'Парковка нашего двора — кто где стоит и кто перекрыл', url: shareUrl() });
+      } catch (e) {
+        // closed the share sheet
+      }
+    }
+
+    /** A shared link ?yard=<id> opens that yard (if it is in the shared list). */
+    async function openYardFromLink() {
+      const params = new URLSearchParams(location.search);
+      const yardId = params.get('yard');
+      if (!yardId) return false;
+      try {
+        history.replaceState(null, '', location.pathname);
+      } catch (e) {
+        // keeps the parameter in the address bar; harmless
+      }
+      const known = knownYards().find(y => y.id === yardId);
+      if (known) {
+        openYard(known.id, known.address);
+        return true;
+      }
+      try {
+        const entry = await dbRequest('GET', 'index/' + yardId);
+        if (entry && entry.address) {
+          openYard(yardId, entry.address);
+          return true;
+        }
+      } catch (e) {
+        // offline: fall back to the usual start
+      }
+      showToast('Двор из ссылки не найден', true);
+      return false;
     }
 
     /* =====================================================================

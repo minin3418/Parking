@@ -1,12 +1,13 @@
 ﻿// Offline support for the app shell. Network first, so a new deploy is picked up
 // on the next launch; the cached copy is used only when there is no connection.
-// Yard data (api.github.com, raw.githubusercontent.com) is not cached here:
+// Yard data (Firebase, another origin) is not cached here:
 // the page keeps its own copy in localStorage.
-const CACHE = 'dvor-parking-v4';
+const CACHE = 'dvor-parking-v5';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './vendor/qrcode.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'
