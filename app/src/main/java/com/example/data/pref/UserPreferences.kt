@@ -70,6 +70,11 @@ class UserPreferences(context: Context) {
         prefs.edit().putString(KEY_KNOWN_YARDS_LIST, json).apply()
     }
 
+    // Shared addresses the user removed from their own list (stay hidden after sync)
+    var hiddenSharedYardIds: Set<String>
+        get() = prefs.getStringSet(KEY_HIDDEN_SHARED_YARDS, emptySet())?.toSet() ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_HIDDEN_SHARED_YARDS, value).apply()
+
     var githubToken: String
         get() {
             val saved = prefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
@@ -95,6 +100,7 @@ class UserPreferences(context: Context) {
         private const val KEY_KNOWN_YARDS_LIST = "known_yards_list"
         private const val KEY_CUSTOM_SERVER = "custom_server_url"
         private const val KEY_GITHUB_TOKEN = "github_token"
+        private const val KEY_HIDDEN_SHARED_YARDS = "hidden_shared_yards"
     }
 }
 

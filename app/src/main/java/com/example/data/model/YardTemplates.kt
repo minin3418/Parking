@@ -66,6 +66,20 @@ object YardTemplates {
         return hasKarbysheva && has22 && !hasOtherBldg
     }
 
+    private val ADDRESS_NOISE_WORDS = setOf("ул", "улица", "г", "город", "владивосток", "д", "дом")
+
+    /**
+     * Comparison key for addresses typed by different people:
+     * "Карбышева 1" and "ул. Карбышева, д. 1" give the same key.
+     */
+    fun addressKey(address: String): String {
+        return address.lowercase(Locale.ROOT)
+            .replace('ё', 'е')
+            .split(Regex("[^a-zа-я0-9]+"))
+            .filter { it.isNotBlank() && it !in ADDRESS_NOISE_WORDS }
+            .joinToString("")
+    }
+
     fun isKarbyshevaYard(address: String, id: String): Boolean {
         return isMasterKarbyshevaYard(address) || isMasterKarbyshevaYard(id)
     }

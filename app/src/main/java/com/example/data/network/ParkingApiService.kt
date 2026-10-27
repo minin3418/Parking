@@ -9,9 +9,11 @@ import com.example.data.model.Row1ParkRequest
 import com.example.data.model.Row2LeaveRequest
 import com.example.data.model.Row2ParkRequest
 import com.example.data.model.SaveMapConfigRequest
+import com.example.data.model.SharedYardEntry
 import com.example.data.model.SurveyItem
 import com.example.data.model.SurveyRequest
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -102,22 +104,27 @@ object ParkingApiClient {
         }
     }
 
+    private const val SHARED_INDEX_FILE = "index.json"
+
+    private val sharedIndexAdapter = moshi.adapter<List<SharedYardEntry>>(
+        Types.newParameterizedType(List::class.java, SharedYardEntry::class.java)
+    )
+
     // Each yard has its own file in the repo, so saving one yard never overwrites another
-    private fun yardContentsUrl(yardId: String): okhttp3.HttpUrl =
+    private fun yardContentsUrl(yardId: String): okhttp3.HttpUrl = yardsFileUrl("$yardId.json")
+
+    private fun yardsFileUrl(fileName: String): okhttp3.HttpUrl =
         okhttp3.HttpUrl.Builder()
             .scheme("https")
             .host("api.github.com")
             .addPathSegments("repos/minin3418/Parking/contents/yards")
-            .addPathSegment("$yardId.json")
+            .addPathSegment(fileName)
             .build()
 
-    /**
-     * Loads yard schema via GitHub contents API (not raw.githubusercontent.com, which is CDN-cached ~5 min).
-     * Returns null when the yard has no file in the repository yet.
-     */
-    suspend fun loadYardFromGitHub(yardId: String): ParkingData? {
+    /** Raw file body via contents API (not raw.githubusercontent.com, which is CDN-cached ~5 min); null on 404. */
+    private suspend fun readRawFile(fileUrl: okhttp3.HttpUrl): String? {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val url = yardContentsUrl(yardId).newBuilder()
+            val url = fileUrl.newBuilder()
                 .addQueryParameter("ref", "main")
                 .addQueryParameter("t", System.currentTimeMillis().toString())
                 .build()
@@ -130,17 +137,117 @@ object ParkingApiClient {
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.code == 404) return@use null
                 if (!response.isSuccessful) throw Exception("GitHub API (${response.code})")
-                val body = response.body?.string().orEmpty()
-                moshi.adapter(ParkingData::class.java).fromJson(body)
+                response.body?.string().orEmpty()
             }
         }
     }
 
+    /** Returns null when the yard has no file in the repository yet. */
+    suspend fun loadYardFromGitHub(yardId: String): ParkingData? {
+        val body = readRawFile(yardContentsUrl(yardId)) ?: return null
+        return moshi.adapter(ParkingData::class.java).fromJson(body)
+    }
+
+    /** Addresses created by all users. Empty when the list does not exist yet. */
+    suspend fun loadSharedYards(): List<SharedYardEntry> {
+        val body = readRawFile(yardsFileUrl(SHARED_INDEX_FILE)) ?: return emptyList()
+        return sharedIndexAdapter.fromJson(body).orEmpty()
+    }
+
+    /**
+     * Adds an address to the shared list. Retries when another device updated the list at the same time
+     * (GitHub rejects a write with a stale sha).
+     */
+    suspend fun addSharedYard(token: String, entry: SharedYardEntry): Result<Unit> {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val cleanToken = token.trim()
+                if (cleanToken.isBlank()) {
+                    return@withContext Result.failure(Exception("GitHub токен не указан"))
+                }
+                val fileUrl = yardsFileUrl(SHARED_INDEX_FILE)
+                repeat(3) {
+                    val getRequest = okhttp3.Request.Builder()
+                        .url(fileUrl.newBuilder()
+                            .addQueryParameter("ref", "main")
+                            .addQueryParameter("t", System.currentTimeMillis().toString())
+                            .build())
+                        .header("Authorization", "Bearer $cleanToken")
+                        .header("Accept", "application/vnd.github.v3+json")
+                        .header("Cache-Control", "no-cache")
+                        .get()
+                        .build()
+
+                    var sha: String? = null
+                    var current: List<SharedYardEntry> = emptyList()
+                    okHttpClient.newCall(getRequest).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val json = org.json.JSONObject(response.body?.string().orEmpty())
+                            sha = json.optString("sha").ifBlank { null }
+                            val decoded = String(
+                                android.util.Base64.decode(json.optString("content"), android.util.Base64.DEFAULT),
+                                Charsets.UTF_8
+                            )
+                            current = sharedIndexAdapter.fromJson(decoded).orEmpty()
+                        } else if (response.code != 404) {
+                            throw Exception("GitHub API (${response.code})")
+                        }
+                    }
+
+                    if (current.any { it.id == entry.id }) return@withContext Result.success(Unit)
+
+                    val updated = sharedIndexAdapter.indent("  ").toJson(current + entry)
+                    val code = putFile(
+                        cleanToken,
+                        fileUrl,
+                        updated,
+                        sha,
+                        "Новый адрес двора: ${entry.address}"
+                    ).first
+                    if (code in 200..299) return@withContext Result.success(Unit)
+                    // 409/422: the list changed since we read it - re-read and try again
+                    if (code != 409 && code != 422) throw Exception("GitHub API ($code)")
+                }
+                Result.failure(Exception("Не удалось обновить общий список адресов"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    /** PUT a file via contents API; returns HTTP code and response body. */
+    private fun putFile(
+        token: String,
+        fileUrl: okhttp3.HttpUrl,
+        content: String,
+        sha: String?,
+        commitMessage: String
+    ): Pair<Int, String> {
+        val putJson = org.json.JSONObject().apply {
+            put("message", commitMessage)
+            put("content", android.util.Base64.encodeToString(content.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
+            put("branch", "main")
+            if (!sha.isNullOrBlank()) put("sha", sha)
+        }.toString()
+        val putRequest = okhttp3.Request.Builder()
+            .url(fileUrl)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/vnd.github.v3+json")
+            .put(putJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .build()
+        return okHttpClient.newCall(putRequest).execute().use { it.code to (it.body?.string() ?: "") }
+    }
+
+    /**
+     * Saves yard schema to yards/<yardId>.json.
+     * With createOnly = true an existing file is left untouched (used when a new address is created).
+     */
     suspend fun saveToGitHub(
         token: String,
         yardId: String,
         data: ParkingData,
-        commitMessage: String = "Обновление схемы двора из приложения"
+        commitMessage: String = "Обновление схемы двора из приложения",
+        createOnly: Boolean = false
     ): Result<String> {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -167,35 +274,16 @@ object ParkingApiClient {
                     }
                 }
 
+                if (createOnly && !currentSha.isNullOrBlank()) {
+                    return@withContext Result.success("Схема уже есть на GitHub")
+                }
+
                 val jsonString = moshi.adapter(ParkingData::class.java).indent("  ").toJson(data)
-                val base64Content = android.util.Base64.encodeToString(
-                    jsonString.toByteArray(Charsets.UTF_8),
-                    android.util.Base64.NO_WRAP
-                )
-
-                val putJson = org.json.JSONObject().apply {
-                    put("message", commitMessage)
-                    put("content", base64Content)
-                    put("branch", "main")
-                    if (!currentSha.isNullOrBlank()) put("sha", currentSha)
-                }.toString()
-
-                val putBody = putJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-
-                val putRequest = okhttp3.Request.Builder()
-                    .url(fileUrl)
-                    .header("Authorization", "Bearer $cleanToken")
-                    .header("Accept", "application/vnd.github.v3+json")
-                    .put(putBody)
-                    .build()
-
-                client.newCall(putRequest).execute().use { putResponse ->
-                    if (putResponse.isSuccessful) {
-                        Result.success("Схема успешно сохранена на GitHub!")
-                    } else {
-                        val err = putResponse.body?.string() ?: "HTTP ${putResponse.code}"
-                        Result.failure(Exception("GitHub API (${putResponse.code}): $err"))
-                    }
+                val (code, body) = putFile(cleanToken, fileUrl, jsonString, currentSha, commitMessage)
+                if (code in 200..299) {
+                    Result.success("Схема успешно сохранена на GitHub!")
+                } else {
+                    Result.failure(Exception("GitHub API ($code): $body"))
                 }
             } catch (e: Exception) {
                 Result.failure(e)

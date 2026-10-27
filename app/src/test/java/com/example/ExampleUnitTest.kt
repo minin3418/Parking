@@ -2,7 +2,9 @@ package com.example
 
 import com.example.data.model.ParkingLandmark
 import com.example.data.model.ParkingSpot
+import com.example.data.model.YardTemplates
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,5 +62,14 @@ class ExampleUnitTest {
     assertEquals(100f, generatedSpots[0].x, 0.001f)
     assertEquals(4, generatedSpots[3].id)
     assertEquals(226f, generatedSpots[3].x, 0.001f)
+  }
+
+  @Test
+  fun testAddressKeyMatchesDifferentSpellings() {
+    val key = YardTemplates.addressKey("ул. Карбышева, 1")
+    assertEquals("карбышева1", key)
+    assertEquals(key, YardTemplates.addressKey("Карбышева 1"))
+    assertEquals(key, YardTemplates.addressKey("г. Владивосток, улица Карбышёва, д. 1"))
+    assertNotEquals(key, YardTemplates.addressKey("ул. Карбышева, 11"))
   }
 }

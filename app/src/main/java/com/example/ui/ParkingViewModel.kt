@@ -14,6 +14,7 @@ import com.example.data.model.Row1ParkRequest
 import com.example.data.model.Row2LeaveRequest
 import com.example.data.model.Row2ParkRequest
 import com.example.data.model.SaveMapConfigRequest
+import com.example.data.model.SharedYardEntry
 import com.example.data.model.SurveyItem
 import com.example.data.model.SurveyRequest
 import com.example.data.model.YardItem
@@ -112,10 +113,69 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     )
     val uiState: StateFlow<ParkingUiState> = _uiState.asStateFlow()
 
+    // Ids present in the shared address list on GitHub (yards/index.json), as of the last sync
+    private var sharedYardIds: Set<String> = emptySet()
+
     init {
         val known = loadKnownYards()
         _uiState.update { it.copy(knownYards = known) }
         loadData()
+        syncSharedYards()
+    }
+
+    /** Adds addresses created by other users to the local list. */
+    private fun syncSharedYards() {
+        viewModelScope.launch {
+            val entries = try {
+                ParkingApiClient.loadSharedYards()
+            } catch (_: Exception) {
+                return@launch
+            }
+            sharedYardIds = entries.map { it.id }.toSet()
+            val hidden = prefs.hiddenSharedYardIds
+            val known = _uiState.value.knownYards.toMutableList()
+            var changed = false
+            entries.forEach { entry ->
+                if (entry.id in hidden) return@forEach
+                val key = YardTemplates.addressKey(entry.address)
+                val exists = known.any { it.id == entry.id || YardTemplates.addressKey(it.address) == key }
+                if (!exists) {
+                    known.add(
+                        YardItem(
+                            id = entry.id,
+                            address = entry.address,
+                            name = "Двор: ${entry.address}",
+                            city = if (entry.address.contains("Владивосток", ignoreCase = true)) "Владивосток" else "Двор дома",
+                            lastVisited = entry.createdAt ?: 0L
+                        )
+                    )
+                    changed = true
+                }
+            }
+            if (changed) {
+                saveKnownYards(known)
+                _uiState.update { it.copy(knownYards = known) }
+            }
+        }
+    }
+
+    /** Replaces local schema with the remote one, keeping occupants recorded on this device. */
+    private fun applyRemoteYard(yardId: String, remote: ParkingData, localData: ParkingData) {
+        val currentOccupants = localData.spots.filter { s -> s.occupiedBy != null }.associateBy { s -> s.id }
+        val mergedSpots = remote.spots.map { s ->
+            val occ = currentOccupants[s.id]?.occupiedBy
+            if (occ != null) s.copy(occupiedBy = occ) else s
+        }
+        val merged = remote.copy(
+            spots = mergedSpots,
+            blockers = if (localData.blockers.isNotEmpty()) localData.blockers else remote.blockers
+        )
+        saveYardLocally(yardId, merged)
+        // The user may have switched yards while the request was in flight
+        if (_uiState.value.currentYardId == yardId) {
+            _uiState.update { it.copy(data = merged) }
+            updateKnownYardsSummary(yardId, merged)
+        }
     }
 
     private fun loadKnownYards(): List<YardItem> {
@@ -254,22 +314,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 try {
                     val remoteMaster = ParkingApiClient.loadYardFromGitHub(yardId)
                     if (remoteMaster != null && remoteMaster.spots.isNotEmpty()) {
-                        // Preserve current local occupants
-                        val currentOccupants = yardData.spots.filter { s -> s.occupiedBy != null }.associateBy { s -> s.id }
-                        val mergedSpots = remoteMaster.spots.map { s ->
-                            val occ = currentOccupants[s.id]?.occupiedBy
-                            if (occ != null) s.copy(occupiedBy = occ) else s
-                        }
-                        val merged = remoteMaster.copy(
-                            spots = mergedSpots,
-                            blockers = if (yardData.blockers.isNotEmpty()) yardData.blockers else remoteMaster.blockers
-                        )
-                        saveYardLocally(yardId, merged)
-                        // The user may have switched yards while the request was in flight
-                        if (_uiState.value.currentYardId == yardId) {
-                            _uiState.update { it.copy(data = merged) }
-                            updateKnownYardsSummary(yardId, merged)
-                        }
+                        applyRemoteYard(yardId, remoteMaster, yardData)
                     }
                 } catch (_: Exception) {
                     // Graceful offline behavior - localData remains authoritative
@@ -359,6 +404,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
     fun openAddressSelector() {
         _uiState.update { it.copy(showAddressSelectionDialog = true) }
+        syncSharedYards()
     }
 
     fun closeAddressSelector() {
@@ -373,9 +419,18 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectYard(address: String, templateType: YardTemplateType = YardTemplateType.STANDARD_2ROWS) {
-        val trimmed = address.trim()
-        if (trimmed.isBlank()) return
-        val yardId = YardTemplates.normalizeAddressToId(trimmed)
+        val typed = address.trim()
+        if (typed.isBlank()) return
+        // Same address typed differently ("Карбышева 1" vs "ул. Карбышева, 1") opens the existing yard
+        val typedId = YardTemplates.normalizeAddressToId(typed)
+        val typedKey = YardTemplates.addressKey(typed)
+        val existing = _uiState.value.knownYards.firstOrNull {
+            it.id == typedId || YardTemplates.addressKey(it.address) == typedKey
+        }
+        val trimmed = existing?.address ?: typed
+        val yardId = existing?.id ?: typedId
+        prefs.hiddenSharedYardIds = prefs.hiddenSharedYardIds - yardId
+        val isFirstOpenOnDevice = prefs.getYardData(yardId).isNullOrBlank()
 
         // Save current yard before switching
         val curData = _uiState.value.data
@@ -433,10 +488,55 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 infoMessage = "Открыта схема двора: $trimmed"
             )
         }
+
+        syncYardWithShared(yardId, trimmed, newYardData, pullRemote = isFirstOpenOnDevice)
+    }
+
+    /**
+     * Makes the yard available to everyone: pulls its shared schema if one exists,
+     * otherwise publishes the local starter schema, and adds the address to the shared list.
+     * The remote schema is applied only on first open, so local edits are not overwritten
+     * (the "Refresh" button pulls it explicitly).
+     */
+    private fun syncYardWithShared(yardId: String, address: String, localData: ParkingData, pullRemote: Boolean) {
+        viewModelScope.launch {
+            try {
+                val remote = ParkingApiClient.loadYardFromGitHub(yardId)
+                if (remote == null) {
+                    val published = ParkingApiClient.saveToGitHub(
+                        token = prefs.githubToken,
+                        yardId = yardId,
+                        data = localData.copy(
+                            spots = localData.spots.map { it.copy(occupiedBy = null) },
+                            blockers = emptyList()
+                        ),
+                        commitMessage = "Новый двор ($address): стартовая схема",
+                        createOnly = true
+                    )
+                    if (published.isFailure) return@launch
+                } else if (pullRemote && remote.spots.isNotEmpty()) {
+                    applyRemoteYard(yardId, remote, localData)
+                }
+
+                if (yardId !in sharedYardIds) {
+                    ParkingApiClient.addSharedYard(
+                        prefs.githubToken,
+                        SharedYardEntry(id = yardId, address = address, createdAt = System.currentTimeMillis())
+                    ).onSuccess {
+                        sharedYardIds = sharedYardIds + yardId
+                    }
+                }
+            } catch (_: Exception) {
+                // Offline: the yard stays local and is published the next time it is opened
+            }
+        }
     }
 
     fun removeKnownYard(yardId: String) {
         val filtered = _uiState.value.knownYards.filter { it.id != yardId || it.isDefault }
+        if (filtered.size != _uiState.value.knownYards.size) {
+            prefs.hiddenSharedYardIds = prefs.hiddenSharedYardIds + yardId
+        }
         saveKnownYards(filtered)
         _uiState.update { it.copy(knownYards = filtered) }
     }

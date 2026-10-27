@@ -110,8 +110,10 @@ fun AddressSelectionDialog(
         }
     }
 
+    val searchKey = YardTemplates.addressKey(searchInput)
     val exactMatch = knownYards.firstOrNull {
-        it.address.trim().equals(searchInput.trim(), ignoreCase = true)
+        it.address.trim().equals(searchInput.trim(), ignoreCase = true) ||
+            (searchKey.isNotBlank() && YardTemplates.addressKey(it.address) == searchKey)
     }
     val isNewAddress = searchInput.isNotBlank() && exactMatch == null
 
@@ -307,7 +309,7 @@ fun AddressSelectionDialog(
 
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "Выберите стартовую схему двора для этого адреса (администратор сможет сразу её перестроить):",
+                                            text = "Адрес появится в общем списке у всех жителей. Выберите стартовую схему (администратор сможет её перестроить):",
                                             fontSize = 12.sp,
                                             color = DarkTextSecondary
                                         )

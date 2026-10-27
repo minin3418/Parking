@@ -115,6 +115,13 @@ data class YardItem(
     @Json(name = "isDefault") val isDefault: Boolean = false
 )
 
+// Entry of the shared address list (yards/index.json in the GitHub repo)
+data class SharedYardEntry(
+    @Json(name = "id") val id: String,
+    @Json(name = "address") val address: String,
+    @Json(name = "createdAt") val createdAt: Long? = null
+)
+
 enum class YardTemplateType(val title: String, val description: String, val spotsCount: Int) {
     STANDARD_2ROWS("Типовой двор (2 ряда)", "20 мест, 2 параллельных ряда, въезд и дом", 20),
     COMPACT("Компактный двор", "12 мест, угловая расстановка, дом и шлагбаум", 12),
