@@ -122,6 +122,21 @@ fun InteractiveYardMap(
         val totalOffsetX = (containerWidth - contentWidth) / 2f + offsetX
         val totalOffsetY = (containerHeight - contentHeight) / 2f + offsetY
 
+        // Dynamic transform helper ensuring current scale/offset are always used at the moment of touch
+        val toVirtual: (Offset) -> Offset = { screenOffset ->
+            val curEffectiveScale = (containerWidth / VIRTUAL_WIDTH) * scale
+            val curContentWidth = VIRTUAL_WIDTH * curEffectiveScale
+            val curContentHeight = VIRTUAL_HEIGHT * curEffectiveScale
+            val curTotalOffsetX = (containerWidth - curContentWidth) / 2f + offsetX
+            val curTotalOffsetY = (containerHeight - curContentHeight) / 2f + offsetY
+            Offset(
+                x = (screenOffset.x - curTotalOffsetX) / curEffectiveScale,
+                y = (screenOffset.y - curTotalOffsetY) / curEffectiveScale
+            )
+        }
+        val currentToVirtual by androidx.compose.runtime.rememberUpdatedState(toVirtual)
+        val currentGetEffectiveScale by androidx.compose.runtime.rememberUpdatedState { (containerWidth / VIRTUAL_WIDTH) * scale }
+
         // Use rememberUpdatedState so pointerInput(Unit) never gets cancelled during active gesture
         val currentData by androidx.compose.runtime.rememberUpdatedState(data)
         val currentIsEditMode by androidx.compose.runtime.rememberUpdatedState(isEditMode)
@@ -149,16 +164,15 @@ fun InteractiveYardMap(
                         var dragLandmarkId: String? = null
 
                         if (currentIsEditMode) {
-                            val vx = (down.position.x - totalOffsetX) / effectiveScale
-                            val vy = (down.position.y - totalOffsetY) / effectiveScale
+                            val vDown = currentToVirtual(down.position)
                             if (currentSelectedSpotId != null) {
                                 val s = currentData?.spots?.find { it.id == currentSelectedSpotId }
-                                if (s != null && hypot(vx - s.x, vy - s.y) < 50f) {
+                                if (s != null && hypot(vDown.x - s.x, vDown.y - s.y) < 55f) {
                                     dragSpotId = s.id
                                 }
                             } else if (currentSelectedLandmarkId != null) {
                                 val lm = currentData?.landmarks?.find { it.id == currentSelectedLandmarkId }
-                                if (lm != null && hypot(vx - lm.x, vy - lm.y) < 50f) {
+                                if (lm != null && hypot(vDown.x - lm.x, vDown.y - lm.y) < 55f) {
                                     dragLandmarkId = lm.id
                                 }
                             }
@@ -183,10 +197,11 @@ fun InteractiveYardMap(
 
                                 if (isDragging) {
                                     change.consume()
+                                    val effScale = currentGetEffectiveScale()
                                     if (dragSpotId != null && currentOnSpotDrag != null) {
-                                        currentOnSpotDrag?.invoke(dragSpotId, pan.x / effectiveScale, pan.y / effectiveScale)
+                                        currentOnSpotDrag?.invoke(dragSpotId, pan.x / effScale, pan.y / effScale)
                                     } else if (dragLandmarkId != null && currentOnLandmarkDrag != null) {
-                                        currentOnLandmarkDrag?.invoke(dragLandmarkId, pan.x / effectiveScale, pan.y / effectiveScale)
+                                        currentOnLandmarkDrag?.invoke(dragLandmarkId, pan.x / effScale, pan.y / effScale)
                                     } else {
                                         // Smooth 1-finger canvas panning with fluid bounds
                                         val maxPanX = (containerWidth * 1.5f * scale).coerceAtLeast(400f)
@@ -209,31 +224,42 @@ fun InteractiveYardMap(
                             }
                         } while (event.changes.any { it.pressed })
 
-                        // If the user tapped without dragging past slop, process tap selection
+                        // If the user tapped without dragging past slop, process tap selection using current zoom/pan
                         if (!isDragging) {
-                            val tapX = down.position.x
-                            val tapY = down.position.y
-                            val vx = (tapX - totalOffsetX) / effectiveScale
-                            val vy = (tapY - totalOffsetY) / effectiveScale
+                            val vTap = currentToVirtual(down.position)
+                            val vx = vTap.x
+                            val vy = vTap.y
 
                             if (currentIsEditMode) {
-                                // 1. Landmarks
+                                // 1. Landmarks hit testing (generous pill bounding check)
                                 val hitLm = currentData?.landmarks?.firstOrNull { lm ->
-                                    hypot(vx - lm.x, vy - lm.y) < 46f
+                                    val textLen = lm.text.length.coerceAtLeast(4)
+                                    val pillHalfW = (textLen * 4.5f + 16f).coerceIn(24f, 90f)
+                                    (kotlin.math.abs(vx - lm.x) <= pillHalfW && kotlin.math.abs(vy - lm.y) <= 22f) ||
+                                            hypot(vx - lm.x, vy - lm.y) < 46f
                                 }
                                 if (hitLm != null) {
                                     currentOnLandmarkClick(hitLm)
                                     return@awaitEachGesture
                                 }
 
-                                // 2. Spots
+                                // 2. Spots hit testing (considers rotation angle and dimensions 36x64)
                                 var closestSpot: ParkingSpot? = null
-                                var minDist = 42f
+                                var minSpotDist = Float.MAX_VALUE
                                 for (spot in currentData?.spots ?: emptyList()) {
-                                    val dist = hypot(vx - spot.x, vy - spot.y)
-                                    if (dist < minDist) {
-                                        minDist = dist
-                                        closestSpot = spot
+                                    val dx = vx - spot.x
+                                    val dy = vy - spot.y
+                                    val rad = Math.toRadians((spot.angle ?: 0f).toDouble())
+                                    val localX = (dx * kotlin.math.cos(-rad) - dy * kotlin.math.sin(-rad)).toFloat()
+                                    val localY = (dx * kotlin.math.sin(-rad) + dy * kotlin.math.cos(-rad)).toFloat()
+                                    val isInside = (kotlin.math.abs(localX) <= 26f && kotlin.math.abs(localY) <= 40f) || hypot(dx, dy) <= 42f
+
+                                    if (isInside) {
+                                        val dist = hypot(dx, dy)
+                                        if (dist < minSpotDist) {
+                                            minSpotDist = dist
+                                            closestSpot = spot
+                                        }
                                     }
                                 }
                                 if (closestSpot != null) {
@@ -254,7 +280,7 @@ fun InteractiveYardMap(
                                 val targets = spots.filter { blocker.blockedSpots.contains(it.id) }
                                 val avgX = if (targets.isNotEmpty()) targets.map { it.x }.average().toFloat() else 480f
                                 val avgY = 195f
-                                if (hypot(vx - avgX, vy - avgY) < 40f) {
+                                if (hypot(vx - avgX, vy - avgY) < 44f) {
                                     currentOnBlockerClick(blocker)
                                     return@awaitEachGesture
                                 }
@@ -262,12 +288,21 @@ fun InteractiveYardMap(
 
                             // 2. Spots
                             var closestSpot: ParkingSpot? = null
-                            var minDist = 40f
+                            var minSpotDist = Float.MAX_VALUE
                             for (spot in spots) {
-                                val dist = hypot(vx - spot.x, vy - spot.y)
-                                if (dist < minDist) {
-                                    minDist = dist
-                                    closestSpot = spot
+                                val dx = vx - spot.x
+                                val dy = vy - spot.y
+                                val rad = Math.toRadians((spot.angle ?: 0f).toDouble())
+                                val localX = (dx * kotlin.math.cos(-rad) - dy * kotlin.math.sin(-rad)).toFloat()
+                                val localY = (dx * kotlin.math.sin(-rad) + dy * kotlin.math.cos(-rad)).toFloat()
+                                val isInside = (kotlin.math.abs(localX) <= 26f && kotlin.math.abs(localY) <= 40f) || hypot(dx, dy) <= 42f
+
+                                if (isInside) {
+                                    val dist = hypot(dx, dy)
+                                    if (dist < minSpotDist) {
+                                        minSpotDist = dist
+                                        closestSpot = spot
+                                    }
                                 }
                             }
                             if (closestSpot != null) {

@@ -381,7 +381,7 @@ fun ParkingScreen(
                             onDeleteLandmark = { lmId -> viewModel.deleteLandmark(lmId) },
                             onCloseLandmarkInspector = { viewModel.selectEditLandmark(null) },
                             onLogoutAdmin = { viewModel.logoutAdmin() },
-                            onSyncGitHub = { viewModel.loadMasterFromGitHub() }
+                            onSyncGitHub = { viewModel.saveMasterToGitHub() }
                         )
                     }
 

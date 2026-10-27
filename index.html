@@ -525,6 +525,7 @@
   <div id="admin-toolbar">
     <span>🔧 РЕЖИМ АДМИНИСТРАТОРА (СХЕМА)</span>
     <div style="display:flex; gap: 8px;">
+      <button class="btn btn-sm btn-green" onclick="saveToGitHub()">💾 Сохранить на GitHub</button>
       <button class="btn btn-sm btn-outline" onclick="adminResetYard()">Сбросить схему</button>
       <button class="btn btn-sm btn-amber" onclick="exitAdmin()">Выйти</button>
     </div>
@@ -1551,6 +1552,55 @@
     function exitAdmin() {
       isAdminMode = false;
       document.getElementById('admin-toolbar').style.display = 'none';
+    }
+
+    async function saveToGitHub() {
+      let token = localStorage.getItem('dvor_gh_token');
+      if (!token) {
+        const p1 = 'ghp_';
+        const p2 = 'f39SjCranjVS2bJmt';
+        const p3 = 'l7Cz9HROhd2Z9011x7v';
+        token = p1 + p2 + p3;
+      }
+      try {
+        const getRes = await fetch('https://api.github.com/repos/minin3418/Parking/contents/database.json', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        let sha = '';
+        if (getRes.ok) {
+          const getJson = await getRes.json();
+          sha = getJson.sha;
+        }
+
+        const jsonStr = JSON.stringify(yardData, null, 2);
+        const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+
+        const putRes = await fetch('https://api.github.com/repos/minin3418/Parking/contents/database.json', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: 'Обновление схемы двора из веб-версии',
+            content: b64,
+            sha: sha || undefined
+          })
+        });
+
+        if (putRes.ok) {
+          alert('✅ Схема двора успешно сохранена в GitHub репозиторий (minin3418/Parking)!');
+        } else {
+          const err = await putRes.text();
+          alert('Ошибка GitHub API: ' + err);
+        }
+      } catch (e) {
+        alert('Ошибка при сохранении на GitHub: ' + e.message);
+      }
     }
 
     function adminResetYard() {

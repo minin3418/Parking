@@ -13,6 +13,8 @@ import com.example.data.model.SurveyItem
 import com.example.data.model.SurveyRequest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -97,6 +99,74 @@ object ParkingApiClient {
             currentBaseUrl = url
             retrofit = buildRetrofit(currentBaseUrl)
             service = retrofit.create(ParkingApiService::class.java)
+        }
+    }
+
+    suspend fun saveToGitHub(
+        token: String,
+        data: ParkingData,
+        commitMessage: String = "Обновление схемы двора из приложения"
+    ): Result<String> {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val cleanToken = token.trim()
+                if (cleanToken.isBlank()) {
+                    return@withContext Result.failure(Exception("GitHub токен не указан"))
+                }
+
+                val client = okHttpClient
+                val getRequest = okhttp3.Request.Builder()
+                    .url("https://api.github.com/repos/minin3418/Parking/contents/database.json")
+                    .header("Authorization", "Bearer $cleanToken")
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .get()
+                    .build()
+
+                var currentSha: String? = null
+                client.newCall(getRequest).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: ""
+                        val match = Regex("\"sha\"\\s*:\\s*\"([^\"]+)\"").find(body)
+                        currentSha = match?.groupValues?.get(1)
+                    }
+                }
+
+                val jsonString = moshi.adapter(ParkingData::class.java).indent("  ").toJson(data)
+                val base64Content = android.util.Base64.encodeToString(
+                    jsonString.toByteArray(Charsets.UTF_8),
+                    android.util.Base64.NO_WRAP
+                )
+
+                val putJson = buildString {
+                    append("{")
+                    append("\"message\": \"").append(commitMessage).append("\",")
+                    append("\"content\": \"").append(base64Content).append("\"")
+                    if (!currentSha.isNullOrBlank()) {
+                        append(",\"sha\": \"").append(currentSha).append("\"")
+                    }
+                    append("}")
+                }
+
+                val putBody = putJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+
+                val putRequest = okhttp3.Request.Builder()
+                    .url("https://api.github.com/repos/minin3418/Parking/contents/database.json")
+                    .header("Authorization", "Bearer $cleanToken")
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .put(putBody)
+                    .build()
+
+                client.newCall(putRequest).execute().use { putResponse ->
+                    if (putResponse.isSuccessful) {
+                        Result.success("Схема успешно сохранена на GitHub!")
+                    } else {
+                        val err = putResponse.body?.string() ?: "HTTP ${putResponse.code}"
+                        Result.failure(Exception("GitHub API (${putResponse.code}): $err"))
+                    }
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 }

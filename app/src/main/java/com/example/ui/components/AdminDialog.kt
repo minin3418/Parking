@@ -224,12 +224,14 @@ fun AdminControlBar(
                         Text("Сохранить", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 } else {
-                    OutlinedButton(
+                    Button(
                         onClick = onSyncGitHub,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = YardCyan)
+                        colors = ButtonDefaults.buttonColors(containerColor = YardCyan)
                     ) {
-                        Text("GitHub Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Сохранить на GitHub", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

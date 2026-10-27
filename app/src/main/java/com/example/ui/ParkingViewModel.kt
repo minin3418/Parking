@@ -1081,6 +1081,39 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun saveMasterToGitHub(tokenOverride: String? = null) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val currentData = _uiState.value.data
+            if (currentData == null || currentData.spots.isEmpty()) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Нет данных двора для сохранения") }
+                return@launch
+            }
+
+            val token = tokenOverride?.trim()?.ifBlank { null } ?: prefs.githubToken
+            val result = ParkingApiClient.saveToGitHub(
+                token = token,
+                data = currentData,
+                commitMessage = "Обновление схемы двора (${_uiState.value.currentYardAddress}) из приложения"
+            )
+            result.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        infoMessage = "✅ Изменения успешно сохранены в GitHub (minin3418/Parking)!"
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Ошибка сохранения на GitHub: ${err.localizedMessage}"
+                    )
+                }
+            }
+        }
+    }
+
     fun loadMasterFromGitHub() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -1094,14 +1127,14 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                         it.copy(
                             data = remoteData,
                             isLoading = false,
-                            infoMessage = "Схема успешно обновлена из https://github.com/minin3418/Parking!"
+                            infoMessage = "Схема успешно загружена из https://github.com/minin3418/Parking!"
                         )
                     }
                 } else {
                     _uiState.update { it.copy(isLoading = false, errorMessage = "В репозитории GitHub не найдено данных схемы") }
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Ошибка синхронизации с GitHub: ${e.localizedMessage}") }
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Ошибка загрузки из GitHub: ${e.localizedMessage}") }
             }
         }
     }
