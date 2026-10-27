@@ -187,6 +187,11 @@ fun AddressSelectionDialog(
                                     fontSize = 12.sp,
                                     color = DarkTextSecondary
                                 )
+                                Text(
+                                    text = "Версия ${com.example.BuildConfig.VERSION_NAME}",
+                                    fontSize = 11.sp,
+                                    color = DarkTextMuted
+                                )
                             }
                         }
 

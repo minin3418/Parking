@@ -16,8 +16,11 @@ android {
     applicationId = "com.aistudio.dvorparking.nujjou"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.1"
+    // Every CI build gets its own version: GitHub Actions run number (build 17 -> 1.17).
+    // Local builds keep the last pre-CI-numbering version.
+    val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    versionCode = buildNumber ?: 2
+    versionName = if (buildNumber != null) "1.$buildNumber" else "1.1-dev"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

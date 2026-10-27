@@ -120,7 +120,7 @@ jobs:
           repository: minin3418/Parking-apk
           token: ${{ secrets.APK_REPO_TOKEN }}
           tag_name: build-${{ github.run_number }}
-          name: Сборка ${{ github.run_number }} (${{ steps.apkrel.outputs.short_sha }})
+          name: Версия 1.${{ github.run_number }} (${{ steps.apkrel.outputs.short_sha }})
           body: ${{ steps.apkrel.outputs.body }}
           files: build-artifacts/dvor-parking.apk
           make_latest: 'true'
