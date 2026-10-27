@@ -231,14 +231,14 @@ fun AdminControlBar(
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Сохранить на GitHub", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Опубликовать схему", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Репозиторий проекта: github.com/minin3418/Parking",
+                text = "Схемы, места и опрос хранятся в общей базе и видны всем жителям",
                 color = DarkTextSecondary,
                 fontSize = 11.sp
             )

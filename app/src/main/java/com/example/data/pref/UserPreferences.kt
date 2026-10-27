@@ -26,10 +26,6 @@ class UserPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_IS_ADMIN, false)
         set(value) = prefs.edit().putBoolean(KEY_IS_ADMIN, value).apply()
 
-    var hasVotedSurvey: Boolean
-        get() = prefs.getBoolean(KEY_SURVEY_VOTED, false)
-        set(value) = prefs.edit().putBoolean(KEY_SURVEY_VOTED, value).apply()
-
     var savedLayoutBackup: String
         get() = prefs.getString(KEY_SAVED_LAYOUT, "") ?: ""
         set(value) = prefs.edit().putString(KEY_SAVED_LAYOUT, value).apply()
@@ -75,16 +71,12 @@ class UserPreferences(context: Context) {
         get() = prefs.getStringSet(KEY_HIDDEN_SHARED_YARDS, emptySet())?.toSet() ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_HIDDEN_SHARED_YARDS, value).apply()
 
-    var githubToken: String
-        get() {
-            val saved = prefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
-            if (saved.isNotBlank()) return saved
-            val partA = "ghp_"
-            val partB = "f39SjCranjVS2bJmt"
-            val partC = "l7Cz9HROhd2Z9011x7v"
-            return partA + partB + partC
-        }
-        set(value) = prefs.edit().putString(KEY_GITHUB_TOKEN, value.trim()).apply()
+    // Survey votes are per yard: voting in one yard must not hide the survey in another
+    fun hasVotedInYard(yardId: String): Boolean = prefs.getBoolean("$KEY_SURVEY_VOTED_PREFIX$yardId", false)
+
+    fun markVotedInYard(yardId: String) {
+        prefs.edit().putBoolean("$KEY_SURVEY_VOTED_PREFIX$yardId", true).apply()
+    }
 
     companion object {
         private const val KEY_CAR = "my_car"
@@ -92,14 +84,13 @@ class UserPreferences(context: Context) {
         private const val KEY_APT = "my_apt"
         private const val KEY_ADMIN_PIN = "admin_pin"
         private const val KEY_IS_ADMIN = "is_admin"
-        private const val KEY_SURVEY_VOTED = "has_voted_survey"
+        private const val KEY_SURVEY_VOTED_PREFIX = "has_voted_survey_"
         private const val KEY_SAVED_LAYOUT = "saved_layout_backup"
         private const val KEY_CURRENT_YARD_ADDRESS = "current_yard_address"
         private const val KEY_CURRENT_YARD_ID = "current_yard_id"
         private const val KEY_ALWAYS_ASK_ADDRESS = "always_ask_address_on_launch"
         private const val KEY_KNOWN_YARDS_LIST = "known_yards_list"
         private const val KEY_CUSTOM_SERVER = "custom_server_url"
-        private const val KEY_GITHUB_TOKEN = "github_token"
         private const val KEY_HIDDEN_SHARED_YARDS = "hidden_shared_yards"
     }
 }

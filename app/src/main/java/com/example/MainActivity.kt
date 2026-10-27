@@ -21,4 +21,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // Live updates from neighbours only while the app is on screen (saves battery and traffic)
+    override fun onStart() {
+        super.onStart()
+        parkingViewModel.setAppInForeground(true)
+    }
+
+    override fun onStop() {
+        parkingViewModel.setAppInForeground(false)
+        super.onStop()
+    }
 }

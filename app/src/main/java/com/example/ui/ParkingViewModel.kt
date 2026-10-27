@@ -21,11 +21,15 @@ import com.example.data.model.YardItem
 import com.example.data.model.YardTemplateType
 import com.example.data.model.YardTemplates
 import com.example.data.network.ParkingApiClient
+import com.example.data.network.ParkingCloud
 import com.example.data.pref.UserPreferences
 import com.squareup.moshi.Types
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -104,7 +108,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             myCarNumber = prefs.myCarNumber,
             myPhone = prefs.myPhone,
             myApt = prefs.myApt,
-            hasVotedSurvey = prefs.hasVotedSurvey,
+            hasVotedSurvey = prefs.hasVotedInYard(
+                if (prefs.currentYardId.isNotBlank()) prefs.currentYardId else YardTemplates.DEFAULT_YARD.id
+            ),
             currentYardAddress = if (prefs.currentYardAddress.isNotBlank()) prefs.currentYardAddress else YardTemplates.DEFAULT_YARD.address,
             currentYardId = if (prefs.currentYardId.isNotBlank()) prefs.currentYardId else YardTemplates.DEFAULT_YARD.id,
             alwaysAskAddressOnLaunch = prefs.alwaysAskAddressOnLaunch,
@@ -113,8 +119,12 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     )
     val uiState: StateFlow<ParkingUiState> = _uiState.asStateFlow()
 
-    // Ids present in the shared address list on GitHub (yards/index.json), as of the last sync
-    private var sharedYardIds: Set<String> = emptySet()
+    // Shared address list (Firebase index/), as of the last sync
+    private var sharedYards: List<SharedYardEntry> = emptyList()
+
+    // Live updates of the open yard while the app is on screen
+    private var liveJob: Job? = null
+    private var isInForeground = false
 
     init {
         val known = loadKnownYards()
@@ -123,15 +133,91 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         syncSharedYards()
     }
 
+    /** Called by the activity: keep the live connection only while the app is visible. */
+    fun setAppInForeground(foreground: Boolean) {
+        isInForeground = foreground
+        if (foreground) startLiveUpdates() else {
+            liveJob?.cancel()
+            liveJob = null
+        }
+    }
+
+    private fun startLiveUpdates() {
+        liveJob?.cancel()
+        if (!isInForeground) return
+        val yardId = _uiState.value.currentYardId
+        liveJob = viewModelScope.launch {
+            ParkingCloud.changes(yardId).conflate().collect {
+                syncCurrentYard(yardId, publishIfMissing = false)
+                // Coalesce bursts of events (e.g. several spots freed at once) into one reload
+                delay(300)
+            }
+        }
+    }
+
+    /**
+     * Pulls the yard from the shared database and shows it. A yard that is not in the
+     * database yet (created on this device) is published when publishIfMissing is set.
+     * Returns false when the database could not be reached.
+     */
+    private suspend fun syncCurrentYard(yardId: String, publishIfMissing: Boolean): Boolean {
+        return try {
+            val remote = ParkingCloud.loadYard(yardId)
+            if (remote == null) {
+                if (publishIfMissing) {
+                    val local = _uiState.value.data?.takeIf { _uiState.value.currentYardId == yardId }
+                    if (local != null) {
+                        val address = _uiState.value.currentYardAddress
+                        ParkingCloud.publishYard(
+                            SharedYardEntry(id = yardId, address = address, createdAt = System.currentTimeMillis()),
+                            local.copy(spots = local.spots.map { it.copy(occupiedBy = null) }, blockers = emptyList())
+                        )
+                        syncSharedYards()
+                    }
+                }
+            } else {
+                saveYardLocally(yardId, remote)
+                val state = _uiState.value
+                // Don't pull the schema from under the admin while they are editing it
+                if (state.currentYardId == yardId && !state.isEditMapMode && !state.hasUnsavedChanges) {
+                    _uiState.update {
+                        it.copy(
+                            data = remote,
+                            adminSurveys = remote.surveys ?: emptyList(),
+                            selectedSpot = it.selectedSpot?.let { sel -> remote.spots.find { s -> s.id == sel.id } }
+                        )
+                    }
+                    updateKnownYardsSummary(yardId, remote)
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Runs a write to the shared database; on failure tells the user and reloads the real state. */
+    private fun pushToCloud(failureMessage: String, write: suspend (yardId: String) -> Unit) {
+        val yardId = _uiState.value.currentYardId
+        viewModelScope.launch {
+            try {
+                write(yardId)
+            } catch (_: Exception) {
+                _uiState.update { it.copy(errorMessage = failureMessage) }
+                syncCurrentYard(yardId, publishIfMissing = false)
+            }
+        }
+    }
+
     /** Adds addresses created by other users to the local list. */
     private fun syncSharedYards() {
         viewModelScope.launch {
             val entries = try {
-                ParkingApiClient.loadSharedYards()
+                ParkingCloud.loadIndex()
             } catch (_: Exception) {
                 return@launch
             }
-            sharedYardIds = entries.map { it.id }.toSet()
+            sharedYards = entries
             val hidden = prefs.hiddenSharedYardIds
             val known = _uiState.value.knownYards.toMutableList()
             var changed = false
@@ -156,25 +242,6 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 saveKnownYards(known)
                 _uiState.update { it.copy(knownYards = known) }
             }
-        }
-    }
-
-    /** Replaces local schema with the remote one, keeping occupants recorded on this device. */
-    private fun applyRemoteYard(yardId: String, remote: ParkingData, localData: ParkingData) {
-        val currentOccupants = localData.spots.filter { s -> s.occupiedBy != null }.associateBy { s -> s.id }
-        val mergedSpots = remote.spots.map { s ->
-            val occ = currentOccupants[s.id]?.occupiedBy
-            if (occ != null) s.copy(occupiedBy = occ) else s
-        }
-        val merged = remote.copy(
-            spots = mergedSpots,
-            blockers = if (localData.blockers.isNotEmpty()) localData.blockers else remote.blockers
-        )
-        saveYardLocally(yardId, merged)
-        // The user may have switched yards while the request was in flight
-        if (_uiState.value.currentYardId == yardId) {
-            _uiState.update { it.copy(data = merged) }
-            updateKnownYardsSummary(yardId, merged)
         }
     }
 
@@ -309,16 +376,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             }
             updateKnownYardsSummary(yardId, yardData)
 
-            // On refresh, pull this yard's own schema file (yards/<yardId>.json) from GitHub
-            if (isRefresh) {
-                try {
-                    val remoteMaster = ParkingApiClient.loadYardFromGitHub(yardId)
-                    if (remoteMaster != null && remoteMaster.spots.isNotEmpty()) {
-                        applyRemoteYard(yardId, remoteMaster, yardData)
-                    }
-                } catch (_: Exception) {
-                    // Graceful offline behavior - localData remains authoritative
-                }
+            // The local copy is shown instantly; the shared database is the source of truth
+            val synced = syncCurrentYard(yardId, publishIfMissing = true)
+            if (isRefresh && !synced) {
+                _uiState.update { it.copy(errorMessage = "Нет связи с общей базой: показаны сохранённые данные") }
             }
         }
     }
@@ -421,16 +482,17 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     fun selectYard(address: String, templateType: YardTemplateType = YardTemplateType.STANDARD_2ROWS) {
         val typed = address.trim()
         if (typed.isBlank()) return
-        // Same address typed differently ("Карбышева 1" vs "ул. Карбышева, 1") opens the existing yard
+        // Same address typed differently ("Карбышева 1" vs "ул. Карбышева, 1") opens the existing yard.
+        // The shared list is checked too: it also holds yards hidden on this device or not synced yet
         val typedId = YardTemplates.normalizeAddressToId(typed)
         val typedKey = YardTemplates.addressKey(typed)
-        val existing = _uiState.value.knownYards.firstOrNull {
-            it.id == typedId || YardTemplates.addressKey(it.address) == typedKey
+        val candidates = _uiState.value.knownYards.map { it.id to it.address } + sharedYards.map { it.id to it.address }
+        val existing = candidates.firstOrNull { (id, address) ->
+            id == typedId || YardTemplates.addressKey(address) == typedKey
         }
-        val trimmed = existing?.address ?: typed
-        val yardId = existing?.id ?: typedId
+        val trimmed = existing?.second ?: typed
+        val yardId = existing?.first ?: typedId
         prefs.hiddenSharedYardIds = prefs.hiddenSharedYardIds - yardId
-        val isFirstOpenOnDevice = prefs.getYardData(yardId).isNullOrBlank()
 
         // Save current yard before switching
         val curData = _uiState.value.data
@@ -485,51 +547,13 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 isLoading = false,
                 isRefreshing = false,
                 errorMessage = null,
+                hasVotedSurvey = prefs.hasVotedInYard(yardId),
                 infoMessage = "Открыта схема двора: $trimmed"
             )
         }
 
-        syncYardWithShared(yardId, trimmed, newYardData, pullRemote = isFirstOpenOnDevice)
-    }
-
-    /**
-     * Makes the yard available to everyone: pulls its shared schema if one exists,
-     * otherwise publishes the local starter schema, and adds the address to the shared list.
-     * The remote schema is applied only on first open, so local edits are not overwritten
-     * (the "Refresh" button pulls it explicitly).
-     */
-    private fun syncYardWithShared(yardId: String, address: String, localData: ParkingData, pullRemote: Boolean) {
-        viewModelScope.launch {
-            try {
-                val remote = ParkingApiClient.loadYardFromGitHub(yardId)
-                if (remote == null) {
-                    val published = ParkingApiClient.saveToGitHub(
-                        token = prefs.githubToken,
-                        yardId = yardId,
-                        data = localData.copy(
-                            spots = localData.spots.map { it.copy(occupiedBy = null) },
-                            blockers = emptyList()
-                        ),
-                        commitMessage = "Новый двор ($address): стартовая схема",
-                        createOnly = true
-                    )
-                    if (published.isFailure) return@launch
-                } else if (pullRemote && remote.spots.isNotEmpty()) {
-                    applyRemoteYard(yardId, remote, localData)
-                }
-
-                if (yardId !in sharedYardIds) {
-                    ParkingApiClient.addSharedYard(
-                        prefs.githubToken,
-                        SharedYardEntry(id = yardId, address = address, createdAt = System.currentTimeMillis())
-                    ).onSuccess {
-                        sharedYardIds = sharedYardIds + yardId
-                    }
-                }
-            } catch (_: Exception) {
-                // Offline: the yard stays local and is published the next time it is opened
-            }
-        }
+        viewModelScope.launch { syncCurrentYard(yardId, publishIfMissing = true) }
+        startLiveUpdates()
     }
 
     fun removeKnownYard(yardId: String) {
@@ -549,22 +573,22 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
             val currentData = _uiState.value.data
             if (currentData != null) {
+                val occupant = com.example.data.model.Occupant(
+                    carNumber = carNumber.trim().uppercase(),
+                    phone = phone.trim(),
+                    apt = apt.trim(),
+                    leaveTime = leaveTime.trim(),
+                    parkedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                )
                 val updatedSpots = currentData.spots.map { s ->
-                    if (s.id == spotId) {
-                        s.copy(
-                            occupiedBy = com.example.data.model.Occupant(
-                                carNumber = carNumber.trim().uppercase(),
-                                phone = phone.trim(),
-                                apt = apt.trim(),
-                                leaveTime = leaveTime.trim(),
-                                parkedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-                            )
-                        )
-                    } else s
+                    if (s.id == spotId) s.copy(occupiedBy = occupant) else s
                 }
                 val updatedData = currentData.copy(spots = updatedSpots)
                 saveYardLocally(currentYardId, updatedData)
                 updateKnownYardsSummary(currentYardId, updatedData)
+                pushToCloud("Нет связи: место №$spotId не отмечено у соседей") { yardId ->
+                    ParkingCloud.setOccupant(yardId, spotId, occupant)
+                }
                 _uiState.update {
                     it.copy(
                         data = updatedData,
@@ -602,6 +626,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 val updatedData = currentData.copy(spots = updatedSpots)
                 saveYardLocally(currentYardId, updatedData)
                 updateKnownYardsSummary(currentYardId, updatedData)
+                pushToCloud("Нет связи: место №$spotId не освобождено у соседей") { yardId ->
+                    ParkingCloud.setOccupant(yardId, spotId, null)
+                }
                 _uiState.update {
                     it.copy(
                         data = updatedData,
@@ -640,6 +667,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 )
                 val updatedData = currentData.copy(blockers = currentData.blockers + newBlocker)
                 saveYardLocally(currentYardId, updatedData)
+                pushToCloud("Нет связи: машина во 2-м ряду не видна соседям") { yardId ->
+                    ParkingCloud.addBlocker(yardId, newBlocker)
+                }
                 _uiState.update {
                     it.copy(
                         data = updatedData,
@@ -676,6 +706,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 val updatedBlockers = currentData.blockers.filter { it.id != blockerId }
                 val updatedData = currentData.copy(blockers = updatedBlockers)
                 saveYardLocally(currentYardId, updatedData)
+                pushToCloud("Нет связи: выезд из 2-го ряда не виден соседям") { yardId ->
+                    ParkingCloud.removeBlocker(yardId, blockerId)
+                }
                 _uiState.update {
                     it.copy(
                         data = updatedData,
@@ -707,8 +740,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 val updatedData = currentData.copy(surveys = existingSurveys + newSurveyItem)
                 saveYardLocally(currentYardId, updatedData)
                 _uiState.update { it.copy(data = updatedData, adminSurveys = updatedData.surveys ?: emptyList()) }
+                pushToCloud("Нет связи: голос не отправлен") { yardId ->
+                    ParkingCloud.addSurvey(yardId, newSurveyItem)
+                }
             }
-            prefs.hasVotedSurvey = true
+            prefs.markVotedInYard(currentYardId)
             _uiState.update {
                 it.copy(
                     isLoading = false,
@@ -1179,66 +1215,25 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 hasUnsavedChanges = false,
                 selectedEditSpotId = null,
                 selectedEditLandmarkId = null,
-                infoMessage = "Схема двора «$currentAddress» успешно сохранена!"
+                infoMessage = "Схема двора «$currentAddress» сохранена"
             )
         }
+        publishSchema()
     }
 
-    fun saveMasterToGitHub(tokenOverride: String? = null) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val currentData = _uiState.value.data
-            if (currentData == null || currentData.spots.isEmpty()) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Нет данных двора для сохранения") }
-                return@launch
-            }
-
-            val token = tokenOverride?.trim()?.ifBlank { null } ?: prefs.githubToken
-            val result = ParkingApiClient.saveToGitHub(
-                token = token,
-                yardId = _uiState.value.currentYardId,
-                data = currentData,
-                commitMessage = "Обновление схемы двора (${_uiState.value.currentYardAddress}) из приложения"
-            )
-            result.onSuccess {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        infoMessage = "✅ Изменения успешно сохранены в GitHub (minin3418/Parking)!"
-                    )
-                }
-            }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Ошибка сохранения на GitHub: ${err.localizedMessage}"
-                    )
-                }
-            }
-        }
-    }
-
-    fun loadMasterFromGitHub() {
+    /** Publishes the current yard schema (spot positions and landmarks) to the shared database. */
+    fun publishSchema() {
+        val currentData = _uiState.value.data ?: return
+        val currentYardId = _uiState.value.currentYardId
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val currentYardId = _uiState.value.currentYardId
-                val remoteData = ParkingApiClient.loadYardFromGitHub(currentYardId)
-                if (remoteData != null && remoteData.spots.isNotEmpty()) {
-                    saveYardLocally(currentYardId, remoteData)
-                    updateKnownYardsSummary(currentYardId, remoteData)
-                    _uiState.update {
-                        it.copy(
-                            data = remoteData,
-                            isLoading = false,
-                            infoMessage = "Схема успешно загружена из https://github.com/minin3418/Parking!"
-                        )
-                    }
-                } else {
-                    _uiState.update { it.copy(isLoading = false, errorMessage = "В репозитории GitHub не найдено данных схемы") }
-                }
+                ParkingCloud.saveSchema(currentYardId, currentData)
+                _uiState.update { it.copy(isLoading = false, infoMessage = "✅ Схема видна всем жителям двора") }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Ошибка загрузки из GitHub: ${e.localizedMessage}") }
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = "Схема сохранена только на телефоне: нет связи с общей базой")
+                }
             }
         }
     }
