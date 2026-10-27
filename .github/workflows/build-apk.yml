@@ -49,6 +49,10 @@ jobs:
         run: |
           touch .env
           if [ ! -f .env.example ]; then touch .env.example; fi
+          # Sign with the committed key so every build installs over the previous one
+          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
+            tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
+          fi
           if [ ! -f "debug.keystore" ]; then
             echo "Generating debug.keystore for APK signing..."
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
