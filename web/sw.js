@@ -2,7 +2,7 @@
 // on the next launch; the cached copy is used only when there is no connection.
 // Yard data (api.github.com, raw.githubusercontent.com) is not cached here:
 // the page keeps its own copy in localStorage.
-const CACHE = 'dvor-parking-v3';
+const CACHE = 'dvor-parking-v4';
 const SHELL = [
   './',
   './index.html',

@@ -834,13 +834,8 @@
     <div id="map-viewport">
       <svg id="yard-svg" viewBox="0 0 960 440" xmlns="http://www.w3.org/2000/svg">
         <rect width="960" height="440" fill="#13171B" />
-        <rect x="0" y="0" width="960" height="35" fill="#241C18" />
-        <rect x="240" y="10" width="460" height="45" rx="6" fill="#1B3324" stroke="#2E7D32" stroke-width="1.5" />
         <path d="M 0,200 Q 400,230 700,200 Q 830,180 960,160" fill="none" stroke="#1A2027" stroke-width="110" stroke-linecap="round" />
         <path d="M 0,200 Q 400,230 700,200 Q 830,180 960,160" fill="none" stroke="#FFD54F" stroke-width="2.5" stroke-dasharray="12 12" opacity="0.75" />
-        <rect x="450" y="380" width="100" height="56" rx="6" fill="#2A1B14" stroke="#FF7043" stroke-width="2" />
-        <rect x="10" y="385" width="260" height="50" rx="4" fill="#1E242B" />
-        <rect x="690" y="385" width="260" height="50" rx="4" fill="#1E242B" />
 
         <g id="landmarks-layer"></g>
         <g id="spots-layer"></g>
@@ -1831,12 +1826,10 @@
       });
 
       blockers.forEach(b => {
-        const targetSpots = spots.filter(s => (b.blockedSpots || []).includes(s.id));
-        const avgX = targetSpots.length > 0 ? (targetSpots.reduce((sum, s) => sum + s.x, 0) / targetSpots.length) : 480;
-        const avgY = 195;
+        const place = blockerPlacement(b, spots);
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
+        g.setAttribute('transform', `translate(${place.x}, ${place.y}) rotate(${place.angle})`);
         g.setAttribute('class', 'svg-blocker-car');
         g.onclick = () => onBlockerClicked(b);
 
@@ -1853,6 +1846,36 @@
         `;
         blockersLayer.appendChild(g);
       });
+    }
+
+    /**
+     * A 2nd-row car stands right in front of the spots it blocks, across them, on the
+     * driveway side (towards the road drawn on the map). Same rule as the Android map.
+     */
+    function blockerPlacement(blocker, spots) {
+      const targets = spots.filter(s => (blocker.blockedSpots || []).includes(s.id));
+      if (!targets.length) return { x: 480, y: 195, angle: 90 };
+      const avg = f => targets.reduce((sum, s) => sum + f(s), 0) / targets.length;
+      const cx = avg(s => s.x), cy = avg(s => s.y), angle = avg(s => s.angle || 0);
+      const rad = angle * Math.PI / 180;
+      let ux = -Math.sin(rad), uy = Math.cos(rad);
+      if ((roadY(cx) - cy) * uy < 0) { ux = -ux; uy = -uy; }
+      const OFFSET = 54; // spot half-length 32 + gap 6 + half-width of the 2nd-row car 16
+      return { x: cx + ux * OFFSET, y: cy + uy * OFFSET, angle: angle + 90 };
+    }
+
+    /** y of the road centre line (M 0,200 Q 400,230 700,200 Q 830,180 960,160) at x. */
+    function roadY(x) {
+      const segments = [[0, 200, 400, 230, 700, 200], [700, 200, 830, 180, 960, 160]];
+      let bestY = 200, bestDx = Infinity;
+      segments.forEach(s => {
+        for (let i = 0; i <= 50; i++) {
+          const t = i / 50, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+          const dx = Math.abs(a * s[0] + b * s[2] + c * s[4] - x);
+          if (dx < bestDx) { bestDx = dx; bestY = a * s[1] + b * s[3] + c * s[5]; }
+        }
+      });
+      return bestY;
     }
 
     function renderList() {

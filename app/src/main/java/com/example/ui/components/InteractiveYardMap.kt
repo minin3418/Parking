@@ -56,10 +56,6 @@ import com.example.data.model.ParkingLandmark
 import com.example.data.model.ParkingSpot
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkSurface
-import com.example.ui.theme.MapBuilding
-import com.example.ui.theme.MapBuildingBorder
-import com.example.ui.theme.MapPlayground
-import com.example.ui.theme.MapPlaygroundBorder
 import com.example.ui.theme.MapRoadDark
 import com.example.ui.theme.MapRoadMarking
 import com.example.ui.theme.YardAmber
@@ -277,10 +273,8 @@ fun InteractiveYardMap(
                             val blockers = currentData?.blockers ?: emptyList()
                             val spots = currentData?.spots ?: emptyList()
                             for (blocker in blockers) {
-                                val targets = spots.filter { blocker.blockedSpots.contains(it.id) }
-                                val avgX = if (targets.isNotEmpty()) targets.map { it.x }.average().toFloat() else 480f
-                                val avgY = 195f
-                                if (hypot(vx - avgX, vy - avgY) < 44f) {
+                                val place = blockerPlacement(blocker, spots)
+                                if (hypot(vx - place.x, vy - place.y) < 30f) {
                                     currentOnBlockerClick(blocker)
                                     return@awaitEachGesture
                                 }
@@ -323,28 +317,6 @@ fun InteractiveYardMap(
                     size = Size(VIRTUAL_WIDTH, VIRTUAL_HEIGHT)
                 )
 
-                // Top boundary / fence line
-                drawRect(
-                    color = Color(0xFF241C18),
-                    topLeft = Offset(0f, 0f),
-                    size = Size(VIRTUAL_WIDTH, 35f)
-                )
-
-                // Playground
-                drawRoundRect(
-                    color = MapPlayground,
-                    topLeft = Offset(240f, 10f),
-                    size = Size(460f, 45f),
-                    cornerRadius = CornerRadius(6f, 6f)
-                )
-                drawRoundRect(
-                    color = MapPlaygroundBorder,
-                    topLeft = Offset(240f, 10f),
-                    size = Size(460f, 45f),
-                    cornerRadius = CornerRadius(6f, 6f),
-                    style = Stroke(width = 1.5f)
-                )
-
                 // Driveway / Road curve: M 0,200 Q 400,230 700,200 T 960,160
                 val roadPath = Path().apply {
                     moveTo(0f, 200f)
@@ -365,35 +337,6 @@ fun InteractiveYardMap(
                         width = 2.5f,
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
                     )
-                )
-
-                // Store Building (МАГАЗИН)
-                drawRoundRect(
-                    color = MapBuilding,
-                    topLeft = Offset(450f, 380f),
-                    size = Size(100f, 56f),
-                    cornerRadius = CornerRadius(6f, 6f)
-                )
-                drawRoundRect(
-                    color = MapBuildingBorder,
-                    topLeft = Offset(450f, 380f),
-                    size = Size(100f, 56f),
-                    cornerRadius = CornerRadius(6f, 6f),
-                    style = Stroke(width = 2f)
-                )
-
-                // Apartment foundations (Карбышева 22 / 22А)
-                drawRoundRect(
-                    color = Color(0xFF1E242B),
-                    topLeft = Offset(10f, 385f),
-                    size = Size(260f, 50f),
-                    cornerRadius = CornerRadius(4f, 4f)
-                )
-                drawRoundRect(
-                    color = Color(0xFF1E242B),
-                    topLeft = Offset(690f, 385f),
-                    size = Size(260f, 50f),
-                    cornerRadius = CornerRadius(4f, 4f)
                 )
 
                 // Alignment Grid when in edit mode
@@ -497,14 +440,10 @@ fun InteractiveYardMap(
 
                 // Draw Blockers in 2nd row
                 blockers.forEach { blocker ->
-                    val targets = spots.filter { blocker.blockedSpots.contains(it.id) }
-                    val avgX = if (targets.isNotEmpty()) {
-                        targets.map { it.x }.average().toFloat()
-                    } else 480f
-                    val avgY = 195f
+                    val place = blockerPlacement(blocker, spots)
 
-                    translate(avgX, avgY) {
-                        rotate(degrees = 90f, pivot = Offset.Zero) {
+                    translate(place.x, place.y) {
+                        rotate(degrees = place.angle, pivot = Offset.Zero) {
                             drawBlockerCar(blocker)
                         }
                     }
@@ -738,6 +677,56 @@ private fun DrawScope.drawSpot(
             drawContext.canvas.nativeCanvas.drawText(shortTime, 0f, 9f, paintTime)
         }
     }
+}
+
+internal data class BlockerPlacement(val x: Float, val y: Float, val angle: Float)
+
+/** Spot half-length (32) + gap (6) + half-width of the 2nd-row car (16). */
+private const val BLOCKER_OFFSET = 54f
+
+/**
+ * A 2nd-row car stands right in front of the spots it blocks, across them, on the
+ * driveway side (towards the road drawn on the map). Same rule as the web app.
+ */
+internal fun blockerPlacement(blocker: ParkingBlocker, spots: List<ParkingSpot>): BlockerPlacement {
+    val targets = spots.filter { blocker.blockedSpots.contains(it.id) }
+    if (targets.isEmpty()) return BlockerPlacement(480f, 195f, 90f)
+    val cx = targets.map { it.x }.average().toFloat()
+    val cy = targets.map { it.y }.average().toFloat()
+    val angle = targets.map { it.angle ?: 0f }.average().toFloat()
+    val rad = Math.toRadians(angle.toDouble())
+    var ux = -kotlin.math.sin(rad).toFloat()
+    var uy = kotlin.math.cos(rad).toFloat()
+    if ((roadY(cx) - cy) * uy < 0f) {
+        ux = -ux
+        uy = -uy
+    }
+    return BlockerPlacement(cx + ux * BLOCKER_OFFSET, cy + uy * BLOCKER_OFFSET, angle + 90f)
+}
+
+/** y of the road centre line (M 0,200 Q 400,230 700,200 Q 830,180 960,160) at [x]. */
+private fun roadY(x: Float): Float {
+    val segments = listOf(
+        floatArrayOf(0f, 200f, 400f, 230f, 700f, 200f),
+        floatArrayOf(700f, 200f, 830f, 180f, 960f, 160f)
+    )
+    var bestY = 200f
+    var bestDx = Float.MAX_VALUE
+    for (s in segments) {
+        for (i in 0..50) {
+            val t = i / 50f
+            val a = (1 - t) * (1 - t)
+            val b = 2 * (1 - t) * t
+            val c = t * t
+            val px = a * s[0] + b * s[2] + c * s[4]
+            val dx = kotlin.math.abs(px - x)
+            if (dx < bestDx) {
+                bestDx = dx
+                bestY = a * s[1] + b * s[3] + c * s[5]
+            }
+        }
+    }
+    return bestY
 }
 
 private fun DrawScope.drawBlockerCar(blocker: ParkingBlocker) {
