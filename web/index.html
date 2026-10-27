@@ -1,0 +1,2244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Двор: Парковка</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#101316">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Парковка">
+  <style>
+    :root {
+      --bg-dark: #0A0D10;
+      --surface-dark: #12161A;
+      --surface-card: #181E24;
+      --border-color: #263238;
+      --yard-green: #00E676;
+      --yard-amber: #FFC107;
+      --yard-red: #FF5252;
+      --yard-cyan: #00E5FF;
+      --text-main: #ECEFF1;
+      --text-muted: #90A4AE;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    input { user-select: text; -webkit-user-select: text; }
+
+    /* Classes like .btn set display and would otherwise override the hidden attribute */
+    [hidden] { display: none !important; }
+
+    html, body {
+      height: 100%;
+      overscroll-behavior: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow: hidden;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background-color: var(--surface-dark);
+      border-bottom: 1px solid var(--border-color);
+      padding: calc(10px + var(--safe-top)) calc(16px + var(--safe-right)) 10px calc(16px + var(--safe-left));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      background: url('icons/icon-192.png') center / cover;
+      box-shadow: 0 2px 8px rgba(0, 230, 118, 0.3);
+    }
+
+    .brand-text { min-width: 0; }
+
+    .brand-text h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .address-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--yard-green);
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    #yard-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      text-decoration: none;
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .btn-green {
+      background: var(--yard-green);
+      color: #051A0E;
+    }
+    .btn-green:hover { background: #00C853; }
+
+    .btn-amber {
+      background: var(--yard-amber);
+      color: #211900;
+    }
+    .btn-amber:hover { background: #FFB300; }
+
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+    .btn-outline:hover { background: rgba(255, 255, 255, 0.12); }
+
+    .btn-download-apk {
+      background: linear-gradient(135deg, #0288D1, #01579B);
+      color: white;
+      box-shadow: 0 2px 6px rgba(2, 136, 209, 0.3);
+    }
+
+    .btn:disabled { opacity: 0.5; cursor: default; }
+
+    @media (max-width: 420px) {
+      .btn-label { display: none; }
+    }
+
+    /* Install hint (iPhone Safari, not yet on home screen) */
+    #install-hint {
+      background: rgba(0, 229, 255, 0.1);
+      border-bottom: 1px solid rgba(0, 229, 255, 0.4);
+      color: var(--text-main);
+      font-size: 12px;
+      padding: 8px calc(16px + var(--safe-right)) 8px calc(16px + var(--safe-left));
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #install-hint span { flex: 1; }
+
+    /* Stats Bar */
+    .stats-bar {
+      background: var(--surface-card);
+      padding: 10px calc(16px + var(--safe-right)) 10px calc(16px + var(--safe-left));
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .counters {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .badge-stat {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot-green { background: var(--yard-green); box-shadow: 0 0 6px var(--yard-green); }
+    .dot-red { background: var(--yard-red); }
+    .dot-amber { background: var(--yard-amber); }
+
+    .view-toggle {
+      display: flex;
+      background: rgba(0,0,0,0.3);
+      padding: 2px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+    .toggle-btn {
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .toggle-btn.active {
+      background: var(--surface-dark);
+      color: var(--text-main);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Yard Map Viewport */
+    #map-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #101316;
+      cursor: grab;
+      display: flex;
+      touch-action: none;
+    }
+    #map-viewport.grabbing {
+      cursor: grabbing;
+    }
+
+    #yard-svg {
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .map-controls {
+      position: absolute;
+      right: calc(16px + var(--safe-right));
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 50;
+    }
+
+    .map-ctrl-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(18, 22, 26, 0.9);
+      border: 1px solid var(--border-color);
+      color: white;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .map-ctrl-btn:active {
+      transform: scale(0.92);
+    }
+
+    .map-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    /* Row 2 Notice Banner */
+    .row2-banner {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: calc(100% - 24px);
+      background: rgba(255, 193, 7, 0.95);
+      color: #1A1300;
+      padding: 8px 12px 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 60;
+    }
+
+    /* Bottom Action Bar */
+    .bottom-bar {
+      background: var(--surface-dark);
+      border-top: 1px solid var(--border-color);
+      padding: 10px calc(16px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(16px + var(--safe-left));
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      gap: 10px;
+      z-index: 80;
+    }
+
+    .bottom-bar .btn {
+      flex: 1;
+      padding: 12px 14px;
+      font-size: 13px;
+      border-radius: 10px;
+    }
+
+    /* List View (Alternative to Map) */
+    #list-view {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px calc(16px + var(--safe-right)) 16px calc(16px + var(--safe-left));
+      background: var(--bg-dark);
+    }
+
+    .spots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .spot-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .spot-card:active { transform: scale(0.97); }
+    .spot-card.free { border-left: 4px solid var(--yard-green); }
+    .spot-card.occupied { border-left: 4px solid var(--yard-red); }
+    .spot-card.blocked { border-left: 4px solid var(--yard-amber); }
+
+    .spot-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .spot-num { font-weight: 700; font-size: 15px; }
+    .spot-status { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .status-free { background: rgba(0, 230, 118, 0.15); color: var(--yard-green); }
+    .status-occupied { background: rgba(255, 82, 82, 0.15); color: var(--yard-red); }
+    .status-blocked { background: rgba(255, 193, 7, 0.15); color: var(--yard-amber); }
+
+    .spot-plate { font-weight: 700; font-size: 14px; color: white; letter-spacing: 0.5px; }
+    .spot-meta { font-size: 12px; color: var(--text-muted); }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: calc(16px + var(--safe-top)) calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left));
+      z-index: 200;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-sheet {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 440px;
+      max-height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      animation: modalSlideUp 0.2s ease-out;
+    }
+
+    @keyframes modalSlideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .modal-header h2 { font-size: 17px; font-weight: 700; }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 22px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-group label, .section-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    /* 16px+ keeps iOS Safari from zooming the page when a field gets focus */
+    .form-control {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+      width: 100%;
+    }
+    .form-control:focus {
+      border-color: var(--yard-green);
+    }
+
+    .car-plate-input {
+      font-family: monospace;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .quick-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .chip:hover, .chip.active {
+      background: var(--yard-green);
+      color: #051A0E;
+      font-weight: 600;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 13px;
+    }
+    .info-label { color: var(--text-muted); }
+    .info-val { font-weight: 600; color: white; text-align: right; }
+    .info-val a { color: var(--yard-green); text-decoration: none; }
+
+    .hint-text { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+    /* Yard picker */
+    #modal-yards .modal-sheet { height: 100%; max-height: 640px; }
+
+    .yard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .yard-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+    }
+    .yard-item.current { border-color: var(--yard-green); }
+    .yard-item-main { flex: 1; min-width: 0; }
+    .yard-item-address {
+      font-weight: 700;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .yard-item-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .yard-item-check { color: var(--yard-green); font-weight: 700; }
+    .yard-item-remove {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 16px;
+      padding: 4px 6px;
+      cursor: pointer;
+    }
+
+    .new-yard-card {
+      border: 1px solid rgba(0, 229, 255, 0.7);
+      background: var(--surface-card);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .new-yard-title {
+      color: var(--yard-cyan);
+      font-weight: 700;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .template-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+    }
+    .template-option.selected {
+      border-color: var(--yard-cyan);
+      background: rgba(0, 229, 255, 0.1);
+    }
+    .template-option input { margin-top: 3px; accent-color: var(--yard-cyan); }
+    .template-title { font-size: 12px; font-weight: 700; }
+    .template-desc { font-size: 11px; color: var(--text-muted); }
+
+    /* Admin Toolbar */
+    #admin-toolbar {
+      display: none;
+      background: #2D2200;
+      border-bottom: 1px solid var(--yard-amber);
+      padding: calc(8px + var(--safe-top)) calc(16px + var(--safe-right)) 8px calc(16px + var(--safe-left));
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: #FFF8E1;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    #admin-toolbar.active { display: flex; }
+    #admin-toolbar.active + header { padding-top: 10px; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(84px + var(--safe-bottom));
+      transform: translateX(-50%);
+      max-width: calc(100% - 32px);
+      background: rgba(24, 30, 36, 0.97);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      z-index: 300;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    #toast.show { opacity: 1; }
+    #toast.error { border-color: var(--yard-red); }
+
+    /* SVG Stall styling */
+    .svg-stall {
+      cursor: pointer;
+    }
+    .svg-stall-rect {
+      stroke-width: 2px;
+    }
+    .svg-stall.free .svg-stall-rect {
+      fill: rgba(0, 230, 118, 0.2);
+      stroke: var(--yard-green);
+    }
+    .svg-stall.occupied .svg-stall-rect {
+      fill: #C62828;
+      stroke: #FF7961;
+    }
+    .svg-stall.blocked .svg-stall-rect {
+      stroke: var(--yard-amber);
+      stroke-dasharray: 6 4;
+    }
+    .svg-stall.selected .svg-stall-rect {
+      fill: rgba(255, 193, 7, 0.4) !important;
+      stroke: var(--yard-amber) !important;
+      stroke-width: 3.5px !important;
+    }
+    .svg-blocker-car {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Admin Bar (when admin mode is on) -->
+  <div id="admin-toolbar">
+    <span>🔧 РЕЖИМ АДМИНИСТРАТОРА</span>
+    <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+      <button class="btn btn-sm btn-green" onclick="saveToGitHub()">💾 Сохранить на GitHub</button>
+      <button class="btn btn-sm btn-outline" onclick="adminClearSpots()">🧹 Очистить места</button>
+      <button class="btn btn-sm btn-amber" onclick="exitAdmin()">Выйти</button>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon"></div>
+      <div class="brand-text">
+        <h1>Двор: Парковка</h1>
+        <button class="address-btn" onclick="openYardPicker()">
+          <span>📍</span>
+          <span id="yard-label">Выберите двор</span>
+          <span>▾</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn btn-sm btn-outline" onclick="openQuickLeaveModal()" title="Быстро освободить место">⚡<span class="btn-label"> Я уезжаю</span></button>
+      <a id="apk-link" href="https://github.com/minin3418/Parking-apk/releases/latest/download/dvor-parking.apk" class="btn btn-sm btn-download-apk" title="Скачать Android APK" hidden>📥<span class="btn-label"> APK</span></a>
+      <button class="btn btn-sm btn-outline" onclick="openAdminModal()" title="Администратор">⚙️</button>
+    </div>
+  </header>
+
+  <div id="install-hint" hidden>
+    <span>Установите на iPhone: нажмите «Поделиться» → «На экран „Домой“».</span>
+    <button class="close-btn" style="font-size:18px;" onclick="dismissInstallHint()">✕</button>
+  </div>
+
+  <!-- Stats & View Switcher -->
+  <div class="stats-bar">
+    <div class="counters">
+      <div class="badge-stat">
+        <span class="dot dot-green"></span>
+        <span>Свободно: <strong id="cnt-free" style="color:var(--yard-green)">--</strong></span>
+      </div>
+      <div class="badge-stat">
+        <span class="dot dot-red"></span>
+        <span>Занято: <strong id="cnt-occupied">--</strong></span>
+      </div>
+      <div class="badge-stat">
+        <span class="dot dot-amber"></span>
+        <span>2-й ряд: <strong id="cnt-blockers">0</strong></span>
+      </div>
+    </div>
+
+    <div class="view-toggle">
+      <button id="btn-view-map" class="toggle-btn active" onclick="switchView('map')">🗺️ Схема</button>
+      <button id="btn-view-list" class="toggle-btn" onclick="switchView('list')">📋 Список</button>
+    </div>
+  </div>
+
+  <!-- Main Area -->
+  <main>
+    <!-- Row 2 Selection Indicator -->
+    <div id="row2-banner" class="row2-banner">
+      <span>Отметьте места, которые перекрываете</span>
+      <button class="btn btn-sm btn-green" onclick="confirmRow2Selection()">Далее</button>
+      <button class="btn btn-sm btn-outline" onclick="cancelRow2Mode()">✕</button>
+    </div>
+
+    <!-- Map View: same 960x440 virtual canvas and background as the Android app -->
+    <div id="map-viewport">
+      <svg id="yard-svg" viewBox="0 0 960 440" xmlns="http://www.w3.org/2000/svg">
+        <rect width="960" height="440" fill="#13171B" />
+        <rect x="0" y="0" width="960" height="35" fill="#241C18" />
+        <rect x="240" y="10" width="460" height="45" rx="6" fill="#1B3324" stroke="#2E7D32" stroke-width="1.5" />
+        <path d="M 0,200 Q 400,230 700,200 Q 830,180 960,160" fill="none" stroke="#1A2027" stroke-width="110" stroke-linecap="round" />
+        <path d="M 0,200 Q 400,230 700,200 Q 830,180 960,160" fill="none" stroke="#FFD54F" stroke-width="2.5" stroke-dasharray="12 12" opacity="0.75" />
+        <rect x="450" y="380" width="100" height="56" rx="6" fill="#2A1B14" stroke="#FF7043" stroke-width="2" />
+        <rect x="10" y="385" width="260" height="50" rx="4" fill="#1E242B" />
+        <rect x="690" y="385" width="260" height="50" rx="4" fill="#1E242B" />
+
+        <g id="landmarks-layer"></g>
+        <g id="spots-layer"></g>
+        <g id="blockers-layer"></g>
+      </svg>
+
+      <div id="map-empty" class="map-empty" hidden></div>
+
+      <div class="map-controls">
+        <button class="map-ctrl-btn" onclick="zoomMap(1.25)" title="Приблизить">+</button>
+        <button class="map-ctrl-btn" onclick="zoomMap(0.8)" title="Отдалить">−</button>
+        <button class="map-ctrl-btn" onclick="resetMapTransform()" title="По размеру экрана" style="font-size:14px;">⛶</button>
+      </div>
+    </div>
+
+    <!-- List View -->
+    <div id="list-view">
+      <div class="spots-grid" id="spots-list-container"></div>
+    </div>
+  </main>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <button class="btn btn-green" onclick="handleParkFreeSpotClick()">
+      🅿️ Занять место
+    </button>
+    <button class="btn btn-amber" onclick="toggleRow2Mode()">
+      🚗 2-м рядом
+    </button>
+    <button id="btn-refresh" class="btn btn-outline" style="max-width: 50px;" onclick="refreshData()" title="Обновить">
+      🔄
+    </button>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- MODAL: Yard picker -->
+  <div id="modal-yards" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>📍 Выбор двора</h2>
+        <button id="yards-close" class="close-btn" onclick="closeYardPicker()">✕</button>
+      </div>
+      <input type="text" id="yard-search" class="form-control" placeholder="Адрес, например: ул. Кирова, 14" oninput="renderYardPicker()" autocomplete="off">
+
+      <div id="new-yard-card" class="new-yard-card" hidden>
+        <div class="new-yard-title" id="new-yard-title">Новый двор</div>
+        <div class="hint-text">Адрес появится в общем списке у всех жителей. Выберите стартовую схему (администратор сможет её перестроить в Android-приложении):</div>
+        <div id="template-options"></div>
+        <button id="btn-create-yard" class="btn btn-green" style="padding: 12px;" onclick="createYardFromSearch()">Создать двор</button>
+      </div>
+
+      <div class="section-label" id="yard-list-label">Дворы</div>
+      <div class="yard-list" id="yard-list"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Park Spot (Row 1) -->
+  <div id="modal-park" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="modal-park-title">Занять место №--</h2>
+        <button class="close-btn" onclick="closeModal('modal-park')">✕</button>
+      </div>
+      <input type="hidden" id="park-spot-id">
+      <div class="form-group">
+        <label>Госномер автомобиля *</label>
+        <input type="text" id="park-plate" class="form-control car-plate-input" placeholder="А123ВС125" maxlength="12" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Номер телефона для связи</label>
+        <input type="tel" id="park-phone" class="form-control" placeholder="+7 999 123-45-67">
+      </div>
+      <div class="form-group">
+        <label>Квартира</label>
+        <input type="text" id="park-apt" class="form-control" placeholder="Например: кв. 45">
+      </div>
+      <div class="form-group">
+        <label>Планируемое время выезда</label>
+        <input type="text" id="park-leave" class="form-control" placeholder="08:00 или до вечера">
+        <div class="quick-chips">
+          <span class="chip" onclick="setQuickLeave('07:30')">07:30</span>
+          <span class="chip" onclick="setQuickLeave('08:00')">08:00</span>
+          <span class="chip" onclick="setQuickLeave('09:00')">09:00</span>
+          <span class="chip" onclick="setQuickLeave('до вечера')">до вечера</span>
+        </div>
+      </div>
+      <button class="btn btn-green" style="padding: 14px; font-size: 15px;" onclick="submitPark()">
+        Припарковаться
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: Spot Details (Occupied) -->
+  <div id="modal-spot-details" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="detail-spot-title">Место №--</h2>
+        <button class="close-btn" onclick="closeModal('modal-spot-details')">✕</button>
+      </div>
+      <input type="hidden" id="detail-spot-id">
+      <div id="detail-blocked-alert" style="display:none; background:rgba(255,193,7,0.15); border:1px solid var(--yard-amber); padding:10px; border-radius:8px; font-size:12px; color:var(--yard-amber);">
+        ⚠️ Данный автомобиль перекрыт во 2-м ряду!
+      </div>
+      <div>
+        <div class="info-row">
+          <span class="info-label">Автомобиль:</span>
+          <span class="info-val" id="detail-plate" style="font-size:16px; letter-spacing:1px;">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Телефон водителя:</span>
+          <span class="info-val" id="detail-phone">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Квартира:</span>
+          <span class="info-val" id="detail-apt">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Припарковался:</span>
+          <span class="info-val" id="detail-parked-at">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Плановый выезд:</span>
+          <span class="info-val" id="detail-leave">--</span>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; color: var(--text-muted);">Чтобы освободить место, введите последние 4 цифры телефона:</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="detail-leave-digits" class="form-control" inputmode="numeric" placeholder="1234" maxlength="4" style="text-align: center; font-weight: 700;">
+          <button class="btn btn-green" onclick="submitLeaveSpot()">Освободить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Blocker Spot (Row 2) -->
+  <div id="modal-blocker" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Встать 2-м рядом</h2>
+        <button class="close-btn" onclick="closeModal('modal-blocker')">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Перекрываемые места</label>
+        <div id="blocker-spots-tags" style="font-weight: 700; color: var(--yard-amber);">--</div>
+      </div>
+      <div class="form-group">
+        <label>Ваш госномер *</label>
+        <input type="text" id="blocker-plate" class="form-control car-plate-input" placeholder="В456ОР125" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Ваш номер телефона *</label>
+        <input type="tel" id="blocker-phone" class="form-control" placeholder="+7 999 123-45-67">
+      </div>
+      <div class="form-group">
+        <label>Когда планируете уехать? *</label>
+        <input type="text" id="blocker-leave" class="form-control" placeholder="Например: 08:00 (уеду рано)">
+      </div>
+      <button class="btn btn-amber" style="padding: 14px; font-size: 15px;" onclick="submitBlocker()">
+        Встать во 2-й ряд
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: Blocker Details -->
+  <div id="modal-blocker-details" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Авто во 2-м ряду</h2>
+        <button class="close-btn" onclick="closeModal('modal-blocker-details')">✕</button>
+      </div>
+      <input type="hidden" id="detail-blocker-id">
+      <div>
+        <div class="info-row">
+          <span class="info-label">Автомобиль:</span>
+          <span class="info-val" id="blk-detail-plate" style="font-size:16px;">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Телефон:</span>
+          <span class="info-val" id="blk-detail-phone">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Перекрыл места:</span>
+          <span class="info-val" id="blk-detail-spots" style="color:var(--yard-amber);">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Время выезда:</span>
+          <span class="info-val" id="blk-detail-leave">--</span>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; color: var(--text-muted);">Убрать авто (последние 4 цифры телефона или PIN):</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="blk-leave-digits" class="form-control" inputmode="numeric" placeholder="1234" maxlength="4" style="text-align: center; font-weight: 700;">
+          <button class="btn btn-amber" onclick="submitLeaveBlocker()">Убрать авто</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Quick Leave -->
+  <div id="modal-quick-leave" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>⚡ Быстрый выезд</h2>
+        <button class="close-btn" onclick="closeModal('modal-quick-leave')">✕</button>
+      </div>
+      <p class="hint-text">
+        Введите последние 4 цифры телефона, который вы указывали при парковке:
+      </p>
+      <input type="text" id="quick-leave-digits" class="form-control" inputmode="numeric" placeholder="4 цифры" maxlength="4" style="text-align: center; font-size: 20px; font-weight: 700;">
+      <button class="btn btn-green" style="padding: 14px;" onclick="submitQuickLeave()">
+        Освободить моё место
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: Admin Login -->
+  <div id="modal-admin" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>⚙️ Администратор</h2>
+        <button class="close-btn" onclick="closeModal('modal-admin')">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Введите PIN-код администратора</label>
+        <input type="password" id="admin-pin" class="form-control" inputmode="numeric" placeholder="••••" maxlength="6" style="text-align: center; font-size: 20px;">
+      </div>
+      <button class="btn btn-amber" style="padding: 12px;" onclick="submitAdminLogin()">
+        Войти в режим администратора
+      </button>
+      <div class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <label>GitHub-токен для записи (хранится только на этом устройстве)</label>
+        <input type="password" id="gh-token-input" class="form-control" placeholder="github_pat_…" autocomplete="off">
+        <div class="hint-text" id="gh-token-status"></div>
+        <button class="btn btn-outline" onclick="saveTokenFromInput()">Сохранить токен</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =====================================================================
+       GITHUB STORAGE (same files as the Android app)
+       yards/<yardId>.json - schema of one yard, yards/index.json - shared address list.
+       Reading needs no token. Writing uses a token entered on this device;
+       the page itself is public, so no token is embedded here.
+       ===================================================================== */
+    const GH_REPO = 'minin3418/Parking';
+    const GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/';
+    const GH_RAW = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/';
+    const SHARED_INDEX_PATH = 'yards/index.json';
+    const ADMIN_PIN = '3418';
+    const MASTER_YARD = { id: 'karbysheva_22', address: 'ул. Карбышева, 22 / 22А' };
+    const TOKEN_KEY = 'dvor_gh_token';
+
+    function ghToken() {
+      return localStorage.getItem(TOKEN_KEY) || '';
+    }
+
+    function yardPath(yardId) {
+      return 'yards/' + yardId + '.json';
+    }
+
+    function encodePath(path) {
+      return path.split('/').map(encodeURIComponent).join('/');
+    }
+
+    function utf8ToBase64(text) {
+      const bytes = new TextEncoder().encode(text);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(binary);
+    }
+
+    function base64ToUtf8(b64) {
+      const binary = atob(b64.replace(/\s/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    }
+
+    /** File text, or null when the file does not exist. */
+    async function ghReadRaw(path) {
+      try {
+        const res = await fetch(GH_API + encodePath(path) + '?ref=main&t=' + Date.now(), {
+          headers: { 'Accept': 'application/vnd.github.raw+json' },
+          cache: 'no-store'
+        });
+        if (res.status === 404) return null;
+        if (res.ok) return await res.text();
+      } catch (e) {
+        // fall through to the CDN copy
+      }
+      // The API allows 60 requests/hour per IP (shared by everyone on a mobile network),
+      // so fall back to the CDN copy, which may lag a few minutes behind
+      const raw = await fetch(GH_RAW + encodePath(path) + '?t=' + Date.now(), { cache: 'no-store' });
+      if (raw.status === 404) return null;
+      if (!raw.ok) throw new Error('GitHub ' + raw.status);
+      return await raw.text();
+    }
+
+    /** { sha, text } of a file via the authenticated API; both null when the file does not exist. */
+    async function ghGetMeta(path) {
+      const res = await fetch(GH_API + encodePath(path) + '?ref=main&t=' + Date.now(), {
+        headers: { 'Authorization': 'Bearer ' + ghToken(), 'Accept': 'application/vnd.github.v3+json' },
+        cache: 'no-store'
+      });
+      if (res.status === 404) return { sha: null, text: null };
+      if (!res.ok) throw new Error('GitHub API ' + res.status);
+      const json = await res.json();
+      return { sha: json.sha, text: base64ToUtf8(json.content || '') };
+    }
+
+    async function ghPut(path, text, sha, message) {
+      const body = { message: message, content: utf8ToBase64(text), branch: 'main' };
+      if (sha) body.sha = sha;
+      const res = await fetch(GH_API + encodePath(path), {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'Bearer ' + ghToken(),
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      return res.status;
+    }
+
+    async function loadRemoteYard(yardId) {
+      const text = await ghReadRaw(yardPath(yardId));
+      return text ? normalizeData(JSON.parse(text)) : null;
+    }
+
+    async function loadSharedYards() {
+      const text = await ghReadRaw(SHARED_INDEX_PATH);
+      return text ? JSON.parse(text) : [];
+    }
+
+    /** Saves yard schema; with createOnly an existing file is left untouched. */
+    async function saveYardToGitHub(yardId, data, message, createOnly) {
+      const meta = await ghGetMeta(yardPath(yardId));
+      if (createOnly && meta.sha) return 'exists';
+      const status = await ghPut(yardPath(yardId), JSON.stringify(data, null, 2), meta.sha, message);
+      if (status < 200 || status >= 300) throw new Error('GitHub API ' + status);
+      return 'saved';
+    }
+
+    /**
+     * Adds an address to the shared list and returns the entry that ends up there:
+     * an existing entry with the same address wins over the new one.
+     */
+    async function addSharedYard(entry) {
+      const key = addressKey(entry.address);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const meta = await ghGetMeta(SHARED_INDEX_PATH);
+        const list = meta.text ? JSON.parse(meta.text) : [];
+        const existing = list.find(e => e.id === entry.id || addressKey(e.address) === key);
+        if (existing) return existing;
+        const status = await ghPut(SHARED_INDEX_PATH, JSON.stringify(list.concat([entry]), null, 2) + '\n', meta.sha, 'Новый адрес двора: ' + entry.address);
+        if (status >= 200 && status < 300) return entry;
+        // 409/422: someone updated the list at the same time - re-read and retry
+        if (status !== 409 && status !== 422) throw new Error('GitHub API ' + status);
+      }
+      throw new Error('Не удалось обновить общий список адресов');
+    }
+
+    /* =====================================================================
+       YARD IDS - exact port of YardTemplates.kt, so web and Android
+       use the same files for the same address
+       ===================================================================== */
+    function javaHashCode(s) {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+      return h;
+    }
+
+    function isMasterKarbyshevaYard(addressOrId) {
+      const norm = addressOrId.trim().toLowerCase();
+      if (norm === 'karbysheva_22') return true;
+      const hasKarbysheva = norm.includes('karbysheva') || norm.includes('карбышев');
+      const has22 = norm.includes('22');
+      const hasOtherBldg = ['24', '26', '28', '11', '15', '10'].some(n => norm.includes(n));
+      return hasKarbysheva && has22 && !hasOtherBldg;
+    }
+
+    function normalizeAddressToId(address) {
+      const trimmed = address.trim();
+      if (isMasterKarbyshevaYard(trimmed)) return 'karbysheva_22';
+      const clean = trimmed.toLowerCase()
+        .replace(/[^a-zа-я0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      const slug = clean.length > 28 ? clean.slice(0, 28) : clean;
+      const h = javaHashCode(trimmed);
+      // Kotlin Math.abs(Int.MIN_VALUE) stays negative
+      const abs = h === -2147483648 ? '-80000000' : Math.abs(h).toString(16);
+      const hash = abs.padStart(6, '0').slice(0, 6);
+      return slug ? 'yard_' + slug + '_' + hash : 'yard_' + hash;
+    }
+
+    const ADDRESS_NOISE_WORDS = new Set(['ул', 'улица', 'г', 'город', 'владивосток', 'д', 'дом']);
+
+    /** "Карбышева 1" and "ул. Карбышева, д. 1" give the same key. */
+    function addressKey(address) {
+      return address.toLowerCase()
+        .replace(/ё/g, 'е')
+        .split(/[^a-zа-я0-9]+/)
+        .filter(w => w && !ADDRESS_NOISE_WORDS.has(w))
+        .join('');
+    }
+
+    /* =====================================================================
+       STARTER TEMPLATES - same as YardTemplates.kt
+       ===================================================================== */
+    const TEMPLATES = [
+      { type: 'STANDARD_2ROWS', title: 'Типовой двор (2 ряда)', desc: '20 мест, 2 параллельных ряда, въезд и дом' },
+      { type: 'COMPACT', title: 'Компактный двор', desc: '12 мест, угловая расстановка, дом и шлагбаум' },
+      { type: 'COPY_KARBYSHEVA', title: 'Схема Карбышева 22', desc: '31 место, 2 ряда (полная схема прототипа)' },
+      { type: 'EMPTY', title: 'Чистый двор (для разметки)', desc: 'Без мест, с ориентиром въезда (для админа)' }
+    ];
+
+    function generateTemplate(address, type, karbyshevaData) {
+      const spots = [];
+      if (type === 'COPY_KARBYSHEVA' && karbyshevaData && karbyshevaData.spots.length) {
+        return {
+          spots: karbyshevaData.spots.map(s => Object.assign({}, s, { occupiedBy: null })),
+          landmarks: [
+            { id: 'home_main', text: address, x: 180, y: 70 },
+            { id: 'driveway', text: 'Въезд во двор', x: 50, y: 200 },
+            { id: 'trash', text: 'Контейнеры ТКО', x: 550, y: 70 }
+          ],
+          blockers: []
+        };
+      }
+      if (type === 'COMPACT') {
+        for (let i = 0; i < 6; i++) spots.push({ id: i + 1, x: 100 + i * 52, y: 140, angle: 0 });
+        for (let i = 0; i < 6; i++) spots.push({ id: 7 + i, x: 100 + i * 54, y: 280, angle: 30 });
+        return {
+          spots: spots,
+          landmarks: [
+            { id: 'house_compact', text: address, x: 160, y: 70 },
+            { id: 'barrier', text: 'Шлагбаум', x: 50, y: 210 },
+            { id: 'greenery', text: 'Газон', x: 440, y: 140 }
+          ],
+          blockers: []
+        };
+      }
+      if (type === 'EMPTY') {
+        return {
+          spots: [],
+          landmarks: [
+            { id: 'house_empty', text: address, x: 200, y: 80 },
+            { id: 'driveway', text: 'Въезд во двор', x: 60, y: 200 }
+          ],
+          blockers: []
+        };
+      }
+      for (let i = 0; i < 10; i++) spots.push({ id: i + 1, x: 80 + i * 50, y: 130, angle: 0 });
+      for (let i = 0; i < 10; i++) spots.push({ id: 11 + i, x: 80 + i * 50, y: 290, angle: 0 });
+      return {
+        spots: spots,
+        landmarks: [
+          { id: 'house_1', text: address, x: 200, y: 60 },
+          { id: 'driveway', text: 'Въезд / Шлагбаум', x: 40, y: 210 },
+          { id: 'walkway', text: 'Пешеходная дорожка', x: 220, y: 370 },
+          { id: 'trash', text: 'ТКО', x: 600, y: 60 }
+        ],
+        blockers: []
+      };
+    }
+
+    /* =====================================================================
+       LOCAL STATE
+       ===================================================================== */
+    let currentYard = null;          // { id, address }
+    let yardData = null;
+    let sharedYards = [];            // entries of yards/index.json as of the last sync
+    let isRow2Mode = false;
+    let selectedRow2Spots = new Set();
+    let isAdminMode = false;
+    let isFirstLaunch = false;
+
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let startX = 0, startY = 0;
+
+    function readJson(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function writeJson(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function dataKey(yardId) {
+      return 'dvor_parking_data_' + yardId;
+    }
+
+    function normalizeData(d) {
+      return {
+        spots: (d && d.spots) || [],
+        landmarks: (d && d.landmarks) || [],
+        blockers: (d && d.blockers) || [],
+        surveys: d && d.surveys ? d.surveys : undefined
+      };
+    }
+
+    function loadLocalYard(yardId) {
+      const data = readJson(dataKey(yardId), null);
+      return data ? normalizeData(data) : null;
+    }
+
+    function saveYardData(yardId, data) {
+      writeJson(dataKey(yardId), data);
+    }
+
+    function knownYards() {
+      return readJson('dvor_known_yards', [MASTER_YARD]);
+    }
+
+    function saveKnownYards(list) {
+      writeJson('dvor_known_yards', list);
+    }
+
+    function hiddenYardIds() {
+      return new Set(readJson('dvor_hidden_yards', []));
+    }
+
+    function setYardHidden(yardId, hidden) {
+      const set = hiddenYardIds();
+      if (hidden) set.add(yardId); else set.delete(yardId);
+      writeJson('dvor_hidden_yards', Array.from(set));
+    }
+
+    function rememberYard(yard) {
+      const list = knownYards().filter(y => y.id !== yard.id);
+      list.unshift({ id: yard.id, address: yard.address });
+      saveKnownYards(list);
+      setYardHidden(yard.id, false);
+    }
+
+    /** Known + shared yards, without the ones the user removed, deduplicated by address. */
+    function visibleYards() {
+      const hidden = hiddenYardIds();
+      const result = [];
+      const seenKeys = new Set();
+      knownYards().concat(sharedYards).forEach(y => {
+        const key = addressKey(y.address);
+        if (hidden.has(y.id) || result.some(r => r.id === y.id) || seenKeys.has(key)) return;
+        seenKeys.add(key);
+        result.push({ id: y.id, address: y.address });
+      });
+      return result;
+    }
+
+    /** Existing yard (local or shared) for an address typed in any spelling. */
+    function findYard(address) {
+      const id = normalizeAddressToId(address);
+      const key = addressKey(address);
+      return knownYards().concat(sharedYards)
+        .find(y => y.id === id || (key && addressKey(y.address) === key)) || null;
+    }
+
+    /** Old web version used its own ids ('karbysheva22', 'yard_<timestamp>'); move data to the shared ids. */
+    function migrateLegacyStorage() {
+      if (localStorage.getItem('dvor_migrated_v2')) return;
+      const moveData = (fromId, toId) => {
+        const raw = localStorage.getItem(dataKey(fromId));
+        if (raw && !localStorage.getItem(dataKey(toId))) localStorage.setItem(dataKey(toId), raw);
+        localStorage.removeItem(dataKey(fromId));
+      };
+      moveData('karbysheva22', MASTER_YARD.id);
+      const legacyActive = localStorage.getItem('dvor_active_yard_id');
+      if (legacyActive === 'karbysheva22') writeJson('dvor_active_yard', MASTER_YARD);
+
+      const custom = readJson('dvor_custom_yards', []);
+      const known = knownYards();
+      custom.forEach(c => {
+        if (!c || !c.name) return;
+        const yard = { id: normalizeAddressToId(c.name), address: c.name.trim() };
+        moveData(c.id, yard.id);
+        if (!known.some(k => k.id === yard.id)) known.push(yard);
+        if (legacyActive === c.id) writeJson('dvor_active_yard', yard);
+      });
+      saveKnownYards(known);
+      ['okeansky100', 'russkaya57', 'svetlan115'].forEach(id => localStorage.removeItem(dataKey(id)));
+      localStorage.removeItem('dvor_custom_yards');
+      localStorage.removeItem('dvor_active_yard_id');
+      localStorage.setItem('dvor_migrated_v2', '1');
+    }
+
+    /* =====================================================================
+       YARD OPENING & SYNC
+       ===================================================================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      migrateLegacyStorage();
+      setupMapInteractions();
+      setupPlatformUi();
+      buildTemplateOptions();
+
+      const active = readJson('dvor_active_yard', null);
+      if (active && active.id) {
+        openYard(active.id, active.address, null);
+      } else {
+        isFirstLaunch = true;
+        renderAll();
+        openYardPicker();
+      }
+      syncSharedYards();
+    });
+
+    async function syncSharedYards() {
+      try {
+        sharedYards = await loadSharedYards();
+      } catch (e) {
+        return;
+      }
+      if (document.getElementById('modal-yards').classList.contains('active')) renderYardPicker();
+    }
+
+    /**
+     * Opens a yard. On the first open on this device the shared schema is pulled from GitHub;
+     * later opens keep the local copy (the refresh button pulls it explicitly).
+     * template: starter schema type when the yard is being created here.
+     */
+    function openYard(yardId, address, template) {
+      if (yardData && currentYard) saveYardData(currentYard.id, yardData);
+
+      const local = loadLocalYard(yardId);
+      currentYard = { id: yardId, address: address };
+      writeJson('dvor_active_yard', currentYard);
+      rememberYard(currentYard);
+      isFirstLaunch = false;
+      cancelRow2Mode();
+
+      yardData = local || { spots: [], landmarks: [], blockers: [] };
+      document.getElementById('yard-label').textContent = address;
+      renderAll(local ? null : 'Загрузка схемы двора…');
+      resetMapTransform();
+      closeModal('modal-yards');
+
+      syncOpenedYard(yardId, address, !!local && !template, template);
+    }
+
+    async function syncOpenedYard(yardId, address, hadLocal, template) {
+      try {
+        const remote = await loadRemoteYard(yardId);
+        if (remote) {
+          if (!hadLocal) applyRemoteYard(yardId, remote);
+        } else {
+          let starter = loadLocalYard(yardId);
+          if (!starter) {
+            starter = generateTemplate(address, 'STANDARD_2ROWS', null);
+            saveYardData(yardId, starter);
+            if (currentYard && currentYard.id === yardId) {
+              yardData = starter;
+              renderAll();
+              resetMapTransform();
+            }
+          }
+          if (!ghToken()) return;
+          await saveYardToGitHub(yardId, {
+            spots: starter.spots.map(s => Object.assign({}, s, { occupiedBy: null })),
+            landmarks: starter.landmarks,
+            blockers: []
+          }, 'Новый двор (' + address + '): стартовая схема', true);
+        }
+        if (ghToken() && !sharedYards.some(e => e.id === yardId)) {
+          const entry = await addSharedYard({ id: yardId, address: address, createdAt: Date.now() });
+          if (!sharedYards.some(e => e.id === entry.id)) sharedYards.push(entry);
+        }
+      } catch (e) {
+        if (currentYard && currentYard.id === yardId && !loadLocalYard(yardId)) {
+          yardData = generateTemplate(address, template || 'STANDARD_2ROWS', null);
+          saveYardData(yardId, yardData);
+          renderAll();
+          resetMapTransform();
+          showToast('Нет связи с GitHub: открыта стартовая схема. Нажмите 🔄 позже.', true);
+        }
+      }
+    }
+
+    /** Replaces the local schema with the remote one, keeping occupants recorded on this device. */
+    function applyRemoteYard(yardId, remote) {
+      const local = loadLocalYard(yardId) || { spots: [], landmarks: [], blockers: [] };
+      const occupants = new Map(local.spots.filter(s => s.occupiedBy).map(s => [s.id, s.occupiedBy]));
+      const merged = {
+        spots: remote.spots.map(s => occupants.has(s.id) ? Object.assign({}, s, { occupiedBy: occupants.get(s.id) }) : s),
+        landmarks: remote.landmarks,
+        blockers: local.blockers.length ? local.blockers : remote.blockers,
+        surveys: remote.surveys
+      };
+      saveYardData(yardId, merged);
+      // The user may have switched yards while the request was in flight
+      if (currentYard && currentYard.id === yardId) {
+        yardData = merged;
+        renderAll();
+        resetMapTransform();
+      }
+    }
+
+    async function refreshData() {
+      if (!currentYard) return;
+      const btn = document.getElementById('btn-refresh');
+      btn.disabled = true;
+      const yardId = currentYard.id;
+      try {
+        const remote = await loadRemoteYard(yardId);
+        if (remote && (remote.spots.length || remote.landmarks.length)) {
+          applyRemoteYard(yardId, remote);
+          showToast('Схема обновлена');
+        } else {
+          showToast('Для этого двора на GitHub ещё нет схемы');
+        }
+      } catch (e) {
+        showToast('Нет связи с GitHub', true);
+      } finally {
+        btn.disabled = false;
+      }
+      syncSharedYards();
+    }
+
+    /* =====================================================================
+       YARD PICKER
+       ===================================================================== */
+    function openYardPicker() {
+      document.getElementById('yard-search').value = '';
+      document.getElementById('yards-close').hidden = isFirstLaunch;
+      renderYardPicker();
+      openModal('modal-yards');
+      syncSharedYards();
+    }
+
+    function closeYardPicker() {
+      if (isFirstLaunch) return;
+      closeModal('modal-yards');
+    }
+
+    function buildTemplateOptions() {
+      const container = document.getElementById('template-options');
+      container.innerHTML = TEMPLATES.map((t, i) => `
+        <label class="template-option${i === 0 ? ' selected' : ''}">
+          <input type="radio" name="yard-template" value="${t.type}"${i === 0 ? ' checked' : ''}>
+          <div>
+            <div class="template-title">${esc(t.title)}</div>
+            <div class="template-desc">${esc(t.desc)}</div>
+          </div>
+        </label>
+      `).join('');
+      container.querySelectorAll('input').forEach(input => {
+        input.addEventListener('change', () => {
+          container.querySelectorAll('.template-option').forEach(o => o.classList.remove('selected'));
+          input.closest('.template-option').classList.add('selected');
+        });
+      });
+    }
+
+    function renderYardPicker() {
+      const query = document.getElementById('yard-search').value.trim();
+      const queryKey = addressKey(query);
+      const all = visibleYards();
+      const filtered = query
+        ? all.filter(y => y.address.toLowerCase().includes(query.toLowerCase()) || (queryKey && addressKey(y.address).includes(queryKey)))
+        : all;
+
+      const isNew = query.length > 0 && !findYard(query);
+      document.getElementById('new-yard-card').hidden = !isNew;
+      document.getElementById('new-yard-title').textContent = '＋ Новый двор: «' + query + '»';
+      document.getElementById('yard-list-label').textContent = query ? 'Найденные дворы' : 'Дворы';
+
+      const list = document.getElementById('yard-list');
+      if (!filtered.length) {
+        list.innerHTML = `<div class="yard-item-meta" style="padding: 12px 0; text-align:center;">${query ? 'Дворов с таким адресом пока нет.' : 'Введите адрес двора выше.'}</div>`;
+        return;
+      }
+      const sharedIds = new Set(sharedYards.map(e => e.id));
+      list.innerHTML = '';
+      filtered.forEach(y => {
+        const isCurrent = currentYard && currentYard.id === y.id;
+        const local = loadLocalYard(y.id);
+        const meta = local
+          ? `${local.spots.length} мест • свободно ${local.spots.filter(s => !s.occupiedBy).length}`
+          : (sharedIds.has(y.id) ? 'Общий двор • схема загрузится при открытии' : 'Схема настраивается');
+        const item = document.createElement('div');
+        item.className = 'yard-item' + (isCurrent ? ' current' : '');
+        item.innerHTML = `
+          <div class="yard-item-main">
+            <div class="yard-item-address">${esc(y.address)}</div>
+            <div class="yard-item-meta">${esc(meta)}</div>
+          </div>
+          ${isCurrent ? '<span class="yard-item-check">✓</span>' : (y.id === MASTER_YARD.id ? '' : '<button class="yard-item-remove" title="Убрать из моего списка">✕</button>')}
+        `;
+        item.addEventListener('click', (e) => {
+          if (e.target.closest('.yard-item-remove')) {
+            e.stopPropagation();
+            removeYardFromList(y.id);
+            return;
+          }
+          openYard(y.id, y.address, null);
+        });
+        list.appendChild(item);
+      });
+    }
+
+    async function createYardFromSearch() {
+      const address = document.getElementById('yard-search').value.trim();
+      if (!address) return;
+      const btn = document.getElementById('btn-create-yard');
+      btn.disabled = true;
+      // Refresh the shared list first so an address created elsewhere is reused, not duplicated
+      try { sharedYards = await loadSharedYards(); } catch (e) { /* offline: create locally */ }
+      btn.disabled = false;
+
+      const existing = findYard(address);
+      if (existing) {
+        showToast('Такой двор уже есть: ' + existing.address);
+        openYard(existing.id, existing.address, null);
+        return;
+      }
+      const checked = document.querySelector('input[name="yard-template"]:checked');
+      const template = checked ? checked.value : 'STANDARD_2ROWS';
+      let base = null;
+      if (template === 'COPY_KARBYSHEVA') {
+        base = loadLocalYard(MASTER_YARD.id);
+        try { base = (await loadRemoteYard(MASTER_YARD.id)) || base; } catch (e) { /* use local copy */ }
+      }
+      const yardId = normalizeAddressToId(address);
+      saveYardData(yardId, generateTemplate(address, template, base));
+      openYard(yardId, address, template);
+      showToast(ghToken()
+        ? 'Двор «' + address + '» создан и добавлен в общий список'
+        : 'Двор «' + address + '» создан на этом устройстве');
+    }
+
+    function removeYardFromList(yardId) {
+      setYardHidden(yardId, true);
+      saveKnownYards(knownYards().filter(y => y.id !== yardId));
+      renderYardPicker();
+    }
+
+    /* =====================================================================
+       RENDERING: SVG MAP & LIST
+       ===================================================================== */
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function renderAll(emptyMessage) {
+      renderMap(emptyMessage);
+      renderList();
+      updateCounters();
+    }
+
+    function updateCounters() {
+      const spots = (yardData && yardData.spots) || [];
+      const blockers = (yardData && yardData.blockers) || [];
+      document.getElementById('cnt-free').textContent = yardData ? spots.filter(s => !s.occupiedBy).length : '--';
+      document.getElementById('cnt-occupied').textContent = yardData ? spots.filter(s => s.occupiedBy).length : '--';
+      document.getElementById('cnt-blockers').textContent = blockers.length;
+    }
+
+    function renderMap(emptyMessage) {
+      const landmarksLayer = document.getElementById('landmarks-layer');
+      const spotsLayer = document.getElementById('spots-layer');
+      const blockersLayer = document.getElementById('blockers-layer');
+      landmarksLayer.innerHTML = '';
+      spotsLayer.innerHTML = '';
+      blockersLayer.innerHTML = '';
+
+      const empty = document.getElementById('map-empty');
+      empty.hidden = !emptyMessage;
+      empty.textContent = emptyMessage || '';
+      if (!yardData) return;
+
+      const blockers = yardData.blockers || [];
+      const spots = yardData.spots || [];
+
+      // Landmarks: text pills, same geometry as the Android map
+      (yardData.landmarks || []).forEach(lm => {
+        const text = lm.text || 'Объект';
+        const pillW = Math.max(44, text.length * 7 + 20);
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.innerHTML = `
+          <rect x="${lm.x - pillW / 2}" y="${lm.y - 15}" width="${pillW}" height="22" rx="6" fill="rgba(27,34,42,0.87)" stroke="rgba(144,164,174,0.33)" stroke-width="1" />
+          <text x="${lm.x}" y="${lm.y}" fill="#CFD8DC" font-size="12" font-weight="700" text-anchor="middle">${esc(text)}</text>
+        `;
+        landmarksLayer.appendChild(g);
+      });
+
+      spots.forEach(spot => {
+        const isFree = !spot.occupiedBy;
+        const isBlocked = blockers.some(b => (b.blockedSpots || []).includes(spot.id));
+        const isSelected = selectedRow2Spots.has(spot.id);
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('transform', `translate(${spot.x}, ${spot.y}) rotate(${spot.angle || 0})`);
+        g.setAttribute('class', `svg-stall ${isFree ? 'free' : 'occupied'} ${isBlocked ? 'blocked' : ''} ${isSelected ? 'selected' : ''}`);
+        g.onclick = () => onSpotClicked(spot);
+
+        if (isFree) {
+          g.innerHTML = `
+            <rect class="svg-stall-rect" x="-18" y="-32" width="36" height="64" rx="6" />
+            <text x="0" y="4" fill="${isSelected ? '#FFD54F' : '#81C784'}" font-size="12" font-weight="700" text-anchor="middle">№${spot.id}${isBlocked ? '⚠️' : ''}${isSelected ? '✓' : ''}</text>
+          `;
+        } else {
+          const occupant = spot.occupiedBy;
+          const displayPlate = occupant.carNumber || ('№' + spot.id);
+          const shortLeave = occupant.leaveTime ? occupant.leaveTime.slice(0, 8) : '';
+
+          g.innerHTML = `
+            <rect class="svg-stall-rect" x="-16" y="-30" width="32" height="60" rx="7" />
+            <rect x="-19" y="-18" width="3" height="6" fill="#888" />
+            <rect x="16" y="-18" width="3" height="6" fill="#888" />
+            <path d="M -11 -12 L -9 -21 Q 0 -23 9 -21 L 11 -12 Z" fill="rgba(0,0,0,0.8)" />
+            <path d="M -11 15 L -9 22 Q 0 23 9 22 L 11 15 Z" fill="rgba(0,0,0,0.8)" />
+            <circle cx="-10" cy="-28" r="2" fill="#FFF9C4" />
+            <circle cx="10" cy="-28" r="2" fill="#FFF9C4" />
+            <text x="0" y="-2" fill="#FFF" font-size="8" font-weight="700" text-anchor="middle">${esc(displayPlate)}</text>
+            ${isBlocked ? '<text x="0" y="10" fill="#FFD54F" font-size="9" text-anchor="middle">⚠️</text>' : ''}
+            ${!isBlocked && shortLeave ? `<text x="0" y="10" fill="#81C784" font-size="6.5" font-weight="700" text-anchor="middle">${esc(shortLeave)}</text>` : ''}
+          `;
+        }
+        spotsLayer.appendChild(g);
+      });
+
+      blockers.forEach(b => {
+        const targetSpots = spots.filter(s => (b.blockedSpots || []).includes(s.id));
+        const avgX = targetSpots.length > 0 ? (targetSpots.reduce((sum, s) => sum + s.x, 0) / targetSpots.length) : 480;
+        const avgY = 195;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('transform', `translate(${avgX}, ${avgY}) rotate(90)`);
+        g.setAttribute('class', 'svg-blocker-car');
+        g.onclick = () => onBlockerClicked(b);
+
+        g.innerHTML = `
+          <rect x="-16" y="-30" width="32" height="60" rx="7" fill="#D84315" stroke="#FFC107" stroke-width="2.5" />
+          <rect x="-19" y="-18" width="3" height="6" fill="#AAA" />
+          <rect x="16" y="-18" width="3" height="6" fill="#AAA" />
+          <path d="M -11 -12 L -9 -21 Q 0 -23 9 -21 L 11 -12 Z" fill="#000" />
+          <path d="M -11 15 L -9 22 Q 0 23 9 22 L 11 15 Z" fill="#000" />
+          <circle cx="-10" cy="-28" r="2" fill="#FFF9C4" />
+          <circle cx="10" cy="-28" r="2" fill="#FFF9C4" />
+          <text x="0" y="-2" fill="#FFF" font-size="8" font-weight="700" text-anchor="middle">${esc(b.carNumber)}</text>
+          ${b.leaveTime ? `<text x="0" y="10" fill="#FFD54F" font-size="6.5" text-anchor="middle">${esc(b.leaveTime.slice(0, 8))}</text>` : ''}
+        `;
+        blockersLayer.appendChild(g);
+      });
+    }
+
+    function renderList() {
+      const container = document.getElementById('spots-list-container');
+      container.innerHTML = '';
+      if (!yardData) return;
+
+      const blockers = yardData.blockers || [];
+      const spots = yardData.spots || [];
+
+      if (!spots.length) {
+        container.innerHTML = '<div class="spot-meta">На схеме этого двора пока нет мест.</div>';
+        return;
+      }
+
+      spots.forEach(spot => {
+        const isFree = !spot.occupiedBy;
+        const isBlocked = blockers.some(b => (b.blockedSpots || []).includes(spot.id));
+
+        const card = document.createElement('div');
+        card.className = `spot-card ${isFree ? 'free' : (isBlocked ? 'blocked' : 'occupied')}`;
+        card.onclick = () => onSpotClicked(spot);
+
+        if (isFree) {
+          card.innerHTML = `
+            <div class="spot-card-header">
+              <span class="spot-num">Место №${spot.id}</span>
+              <span class="spot-status status-free">Свободно</span>
+            </div>
+            <div class="spot-meta" style="color:var(--yard-green); font-weight:600; margin-top:8px;">
+              + Нажмите, чтобы занять
+            </div>
+          `;
+        } else {
+          const occ = spot.occupiedBy;
+          card.innerHTML = `
+            <div class="spot-card-header">
+              <span class="spot-num">Место №${spot.id}</span>
+              <span class="spot-status ${isBlocked ? 'status-blocked' : 'status-occupied'}">
+                ${isBlocked ? '⚠️ Перекрыт' : 'Занято'}
+              </span>
+            </div>
+            <div class="spot-plate">${esc(occ.carNumber)}</div>
+            <div class="spot-meta">Тел: ${esc(occ.phone || 'не указан')}</div>
+            ${occ.leaveTime ? `<div class="spot-meta">Выезд: <strong>${esc(occ.leaveTime)}</strong></div>` : ''}
+          `;
+        }
+        container.appendChild(card);
+      });
+    }
+
+    /* =====================================================================
+       INTERACTION: PAN & PINCH ZOOM FOR MAP
+       ===================================================================== */
+    function updateTransform() {
+      document.getElementById('yard-svg').style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    }
+
+    function setupMapInteractions() {
+      const viewport = document.getElementById('map-viewport');
+
+      viewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.svg-stall') || e.target.closest('.svg-blocker-car')) return;
+        isPanning = true;
+        viewport.classList.add('grabbing');
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPanning = false;
+        viewport.classList.remove('grabbing');
+      });
+
+      viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        zoomMap(e.deltaY < 0 ? 1.15 : 0.85);
+      }, { passive: false });
+
+      let touchStartX = 0, touchStartY = 0;
+      let initialDistance = 0;
+      let initialScale = 1;
+
+      const startPan = (touch) => {
+        touchStartX = touch.clientX - panX;
+        touchStartY = touch.clientY - panY;
+      };
+
+      viewport.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          startPan(e.touches[0]);
+        } else if (e.touches.length === 2) {
+          initialDistance = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          initialScale = scale;
+        }
+      }, { passive: true });
+
+      viewport.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1) {
+          panX = e.touches[0].clientX - touchStartX;
+          panY = e.touches[0].clientY - touchStartY;
+          updateTransform();
+        } else if (e.touches.length === 2 && initialDistance > 0) {
+          const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          scale = Math.min(Math.max(initialScale * (dist / initialDistance), MIN_SCALE), MAX_SCALE);
+          updateTransform();
+        }
+      }, { passive: true });
+
+      // After a pinch, continue panning with the remaining finger without a jump
+      viewport.addEventListener('touchend', (e) => {
+        if (e.touches.length === 1) startPan(e.touches[0]);
+      }, { passive: true });
+
+      // iOS Safari ignores user-scalable=no; block page pinch-zoom outside the map
+      document.addEventListener('gesturestart', (e) => e.preventDefault());
+    }
+
+    const MIN_SCALE = 0.5;
+    const MAX_SCALE = 6;
+
+    function zoomMap(factor) {
+      scale = Math.min(Math.max(scale * factor, MIN_SCALE), MAX_SCALE);
+      updateTransform();
+    }
+
+    /**
+     * Zooms to the spots and landmarks instead of the whole 960x440 canvas:
+     * on a portrait phone the full canvas makes stalls too small to tap.
+     */
+    function resetMapTransform() {
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      const viewport = document.getElementById('map-viewport');
+      const vw = viewport.clientWidth;
+      const vh = viewport.clientHeight;
+      const items = [];
+      ((yardData && yardData.spots) || []).forEach(s => items.push([s.x - 40, s.y - 40, s.x + 40, s.y + 40]));
+      ((yardData && yardData.landmarks) || []).forEach(l => {
+        const half = Math.max(44, (l.text || '').length * 7 + 20) / 2;
+        items.push([l.x - half, l.y - 20, l.x + half, l.y + 12]);
+      });
+      if (vw && vh && items.length) {
+        const minX = Math.max(0, Math.min(...items.map(i => i[0])));
+        const minY = Math.max(0, Math.min(...items.map(i => i[1])));
+        const maxX = Math.min(960, Math.max(...items.map(i => i[2])));
+        const maxY = Math.min(440, Math.max(...items.map(i => i[3])));
+        // The svg itself is fitted into the viewport ("meet"), our transform is applied on top
+        const base = Math.min(vw / 960, vh / 440);
+        const offX = (vw - 960 * base) / 2;
+        const offY = (vh - 440 * base) / 2;
+        const target = Math.min(vw / (maxX - minX), vh / (maxY - minY)) * 0.95;
+        scale = Math.min(Math.max(target / base, 1), MAX_SCALE);
+        panX = vw / 2 - scale * (offX + (minX + maxX) / 2 * base);
+        panY = vh / 2 - scale * (offY + (minY + maxY) / 2 * base);
+      }
+      updateTransform();
+    }
+
+    function switchView(view) {
+      const map = document.getElementById('map-viewport');
+      const list = document.getElementById('list-view');
+      const btnMap = document.getElementById('btn-view-map');
+      const btnList = document.getElementById('btn-view-list');
+
+      if (view === 'map') {
+        const wasHidden = map.style.display === 'none';
+        map.style.display = 'flex';
+        list.style.display = 'none';
+        btnMap.classList.add('active');
+        btnList.classList.remove('active');
+        // Fitting needs the viewport size, which is 0 while the map is hidden
+        if (wasHidden) resetMapTransform();
+      } else {
+        map.style.display = 'none';
+        list.style.display = 'block';
+        btnList.classList.add('active');
+        btnMap.classList.remove('active');
+      }
+    }
+
+    /* =====================================================================
+       SPOT & BLOCKER ACTIONS
+       ===================================================================== */
+    function persist() {
+      saveYardData(currentYard.id, yardData);
+      renderAll();
+    }
+
+    function onSpotClicked(spot) {
+      if (isRow2Mode) {
+        if (selectedRow2Spots.has(spot.id)) {
+          selectedRow2Spots.delete(spot.id);
+        } else {
+          selectedRow2Spots.add(spot.id);
+        }
+        renderMap();
+        return;
+      }
+
+      if (!spot.occupiedBy) {
+        document.getElementById('park-spot-id').value = spot.id;
+        document.getElementById('modal-park-title').textContent = `Занять место №${spot.id}`;
+        document.getElementById('park-plate').value = localStorage.getItem('dvor_user_plate') || '';
+        document.getElementById('park-phone').value = localStorage.getItem('dvor_user_phone') || '';
+        document.getElementById('park-apt').value = localStorage.getItem('dvor_user_apt') || '';
+        document.getElementById('park-leave').value = '';
+        openModal('modal-park');
+      } else {
+        const blockers = yardData.blockers || [];
+        const isBlocked = blockers.some(b => (b.blockedSpots || []).includes(spot.id));
+        const occ = spot.occupiedBy;
+
+        document.getElementById('detail-spot-id').value = spot.id;
+        document.getElementById('detail-spot-title').textContent = `Место №${spot.id}`;
+        document.getElementById('detail-plate').textContent = occ.carNumber || '--';
+        document.getElementById('detail-phone').innerHTML = occ.phone ? `<a href="tel:${esc(occ.phone)}">📞 ${esc(occ.phone)}</a>` : 'Не указан';
+        document.getElementById('detail-apt').textContent = occ.apt || 'Не указана';
+        document.getElementById('detail-parked-at').textContent = occ.parkedAt ? new Date(occ.parkedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : 'Сегодня';
+        document.getElementById('detail-leave').textContent = occ.leaveTime || 'Не указано';
+        document.getElementById('detail-blocked-alert').style.display = isBlocked ? 'block' : 'none';
+        document.getElementById('detail-leave-digits').value = '';
+
+        openModal('modal-spot-details');
+      }
+    }
+
+    function onBlockerClicked(blocker) {
+      document.getElementById('detail-blocker-id').value = blocker.id;
+      document.getElementById('blk-detail-plate').textContent = blocker.carNumber;
+      document.getElementById('blk-detail-phone').innerHTML = blocker.phone ? `<a href="tel:${esc(blocker.phone)}">📞 ${esc(blocker.phone)}</a>` : 'Не указан';
+      document.getElementById('blk-detail-spots').textContent = (blocker.blockedSpots || []).map(s => '№' + s).join(', ');
+      document.getElementById('blk-detail-leave').textContent = blocker.leaveTime || 'Не указано';
+      document.getElementById('blk-leave-digits').value = '';
+      openModal('modal-blocker-details');
+    }
+
+    function handleParkFreeSpotClick() {
+      if (!yardData) return;
+      const freeSpot = yardData.spots.find(s => !s.occupiedBy);
+      if (!freeSpot) {
+        showToast('Свободных мест нет. Можно встать 2-м рядом.', true);
+        return;
+      }
+      onSpotClicked(freeSpot);
+    }
+
+    function setQuickLeave(val) {
+      document.getElementById('park-leave').value = val;
+    }
+
+    function submitPark() {
+      const spotId = Number(document.getElementById('park-spot-id').value);
+      const plate = document.getElementById('park-plate').value.trim().toUpperCase();
+      const phone = document.getElementById('park-phone').value.trim();
+      const apt = document.getElementById('park-apt').value.trim();
+      const leave = document.getElementById('park-leave').value.trim();
+
+      if (!plate) return showToast('Введите госномер автомобиля', true);
+
+      localStorage.setItem('dvor_user_plate', plate);
+      if (phone) localStorage.setItem('dvor_user_phone', phone);
+      if (apt) localStorage.setItem('dvor_user_apt', apt);
+
+      const spot = yardData.spots.find(s => s.id === spotId);
+      if (spot) {
+        spot.occupiedBy = {
+          carNumber: plate,
+          phone: phone,
+          apt: apt,
+          leaveTime: leave,
+          parkedAt: new Date().toISOString()
+        };
+        closeModal('modal-park');
+        persist();
+      }
+    }
+
+    function phoneMatches(phone, digits) {
+      return digits.length === 4 && (phone || '').replace(/\D/g, '').endsWith(digits);
+    }
+
+    function submitLeaveSpot() {
+      const spotId = Number(document.getElementById('detail-spot-id').value);
+      const digits = document.getElementById('detail-leave-digits').value.trim();
+      const spot = yardData.spots.find(s => s.id === spotId);
+
+      if (!spot || !spot.occupiedBy) return closeModal('modal-spot-details');
+
+      if (digits === ADMIN_PIN || isAdminMode || phoneMatches(spot.occupiedBy.phone, digits)) {
+        spot.occupiedBy = null;
+        closeModal('modal-spot-details');
+        persist();
+      } else {
+        showToast('Неверные 4 цифры телефона владельца', true);
+      }
+    }
+
+    /* =====================================================================
+       ROW 2 BLOCKER MODE
+       ===================================================================== */
+    function toggleRow2Mode() {
+      if (!yardData || !yardData.spots.length) return;
+      isRow2Mode = !isRow2Mode;
+      selectedRow2Spots.clear();
+      document.getElementById('row2-banner').style.display = isRow2Mode ? 'flex' : 'none';
+      if (isRow2Mode) switchView('map');
+      renderMap();
+    }
+
+    function cancelRow2Mode() {
+      isRow2Mode = false;
+      selectedRow2Spots.clear();
+      document.getElementById('row2-banner').style.display = 'none';
+      renderMap();
+    }
+
+    function confirmRow2Selection() {
+      if (selectedRow2Spots.size === 0) {
+        showToast('Отметьте на схеме хотя бы одно место', true);
+        return;
+      }
+      isRow2Mode = false;
+      document.getElementById('row2-banner').style.display = 'none';
+
+      document.getElementById('blocker-spots-tags').textContent = Array.from(selectedRow2Spots).map(s => '№' + s).join(', ');
+      document.getElementById('blocker-plate').value = localStorage.getItem('dvor_user_plate') || '';
+      document.getElementById('blocker-phone').value = localStorage.getItem('dvor_user_phone') || '';
+      document.getElementById('blocker-leave').value = '';
+      openModal('modal-blocker');
+    }
+
+    function submitBlocker() {
+      const plate = document.getElementById('blocker-plate').value.trim().toUpperCase();
+      const phone = document.getElementById('blocker-phone').value.trim();
+      const leave = document.getElementById('blocker-leave').value.trim();
+
+      if (!plate) return showToast('Укажите госномер вашего автомобиля', true);
+      if (!phone) return showToast('Укажите телефон, чтобы вас могли вызвать', true);
+
+      localStorage.setItem('dvor_user_plate', plate);
+      localStorage.setItem('dvor_user_phone', phone);
+
+      yardData.blockers.push({
+        id: 'blk_' + Date.now(),
+        carNumber: plate,
+        phone: phone,
+        leaveTime: leave,
+        blockedSpots: Array.from(selectedRow2Spots),
+        parkedAt: new Date().toISOString()
+      });
+      selectedRow2Spots.clear();
+      closeModal('modal-blocker');
+      persist();
+    }
+
+    function submitLeaveBlocker() {
+      const blkId = document.getElementById('detail-blocker-id').value;
+      const digits = document.getElementById('blk-leave-digits').value.trim();
+      const idx = yardData.blockers.findIndex(b => b.id === blkId);
+
+      if (idx === -1) return closeModal('modal-blocker-details');
+      const blocker = yardData.blockers[idx];
+
+      if (digits === ADMIN_PIN || isAdminMode || phoneMatches(blocker.phone, digits)) {
+        yardData.blockers.splice(idx, 1);
+        closeModal('modal-blocker-details');
+        persist();
+      } else {
+        showToast('Неверные 4 цифры телефона владельца', true);
+      }
+    }
+
+    /* =====================================================================
+       QUICK LEAVE & ADMIN
+       ===================================================================== */
+    function openQuickLeaveModal() {
+      document.getElementById('quick-leave-digits').value = '';
+      openModal('modal-quick-leave');
+    }
+
+    function submitQuickLeave() {
+      const digits = document.getElementById('quick-leave-digits').value.trim();
+      if (digits.length !== 4) return showToast('Введите ровно 4 последние цифры', true);
+
+      let freed = false;
+      yardData.spots.forEach(spot => {
+        if (spot.occupiedBy && phoneMatches(spot.occupiedBy.phone, digits)) {
+          spot.occupiedBy = null;
+          freed = true;
+        }
+      });
+
+      const initialCount = yardData.blockers.length;
+      yardData.blockers = yardData.blockers.filter(b => !phoneMatches(b.phone, digits));
+      if (yardData.blockers.length < initialCount) freed = true;
+
+      if (freed) {
+        closeModal('modal-quick-leave');
+        persist();
+        showToast('Место освобождено. Счастливого пути!');
+      } else {
+        showToast('Автомобиль с таким телефоном не найден', true);
+      }
+    }
+
+    function updateTokenStatus() {
+      document.getElementById('gh-token-status').textContent = ghToken()
+        ? 'Токен сохранён: новые дворы и схемы публикуются на GitHub.'
+        : 'Токен не задан: новые дворы остаются только на этом устройстве.';
+    }
+
+    function openAdminModal() {
+      document.getElementById('admin-pin').value = '';
+      document.getElementById('gh-token-input').value = '';
+      updateTokenStatus();
+      openModal('modal-admin');
+    }
+
+    function saveTokenFromInput() {
+      const value = document.getElementById('gh-token-input').value.trim();
+      if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY);
+      document.getElementById('gh-token-input').value = '';
+      updateTokenStatus();
+      showToast(value ? 'Токен сохранён на этом устройстве' : 'Токен удалён');
+    }
+
+    function submitAdminLogin() {
+      const pin = document.getElementById('admin-pin').value.trim();
+      if (pin === ADMIN_PIN) {
+        isAdminMode = true;
+        closeModal('modal-admin');
+        document.getElementById('admin-toolbar').classList.add('active');
+        showToast('Режим администратора включён');
+      } else {
+        showToast('Неверный PIN администратора', true);
+      }
+    }
+
+    function exitAdmin() {
+      isAdminMode = false;
+      document.getElementById('admin-toolbar').classList.remove('active');
+    }
+
+    async function saveToGitHub() {
+      if (!currentYard || !yardData) return;
+      if (!ghToken()) return showToast('Сначала сохраните GitHub-токен в ⚙️', true);
+      try {
+        await saveYardToGitHub(currentYard.id, yardData, 'Обновление схемы двора (' + currentYard.address + ') из веб-версии', false);
+        showToast('✅ Схема сохранена на GitHub');
+      } catch (e) {
+        showToast('Ошибка сохранения на GitHub: ' + e.message, true);
+      }
+    }
+
+    function adminClearSpots() {
+      if (!yardData || !confirm('Освободить все места и убрать машины 2-го ряда в этом дворе?')) return;
+      yardData.spots.forEach(s => { s.occupiedBy = null; });
+      yardData.blockers = [];
+      persist();
+    }
+
+    /* =====================================================================
+       PLATFORM: install hint, APK link, offline support
+       ===================================================================== */
+    function setupPlatformUi() {
+      const ua = navigator.userAgent;
+      const isIos = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+      document.getElementById('apk-link').hidden = !/Android/i.test(ua) || isStandalone;
+      document.getElementById('install-hint').hidden = !isIos || isStandalone || localStorage.getItem('dvor_install_hint_dismissed') === '1';
+
+      if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
+    }
+
+    function dismissInstallHint() {
+      localStorage.setItem('dvor_install_hint_dismissed', '1');
+      document.getElementById('install-hint').hidden = true;
+    }
+
+    /* Toast & modal helpers */
+    let toastTimer = null;
+    function showToast(message, isError) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.toggle('error', !!isError);
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.add('active');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target !== overlay) return;
+        if (overlay.id === 'modal-yards') closeYardPicker(); else overlay.classList.remove('active');
+      });
+    });
+  </script>
+</body>
+</html>
