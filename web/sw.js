@@ -1,8 +1,8 @@
-// Offline support for the app shell. Network first, so a new deploy is picked up
+﻿// Offline support for the app shell. Network first, so a new deploy is picked up
 // on the next launch; the cached copy is used only when there is no connection.
 // Yard data (api.github.com, raw.githubusercontent.com) is not cached here:
 // the page keeps its own copy in localStorage.
-const CACHE = 'dvor-parking-v1';
+const CACHE = 'dvor-parking-v2';
 const SHELL = [
   './',
   './index.html',

@@ -531,6 +531,33 @@
 
     .hint-text { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 
+    .install-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .install-num {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--yard-green);
+      color: #051A0E;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .share-icon {
+      width: 20px;
+      height: 20px;
+      vertical-align: -4px;
+      color: #0A84FF;
+    }
+
     /* Yard picker */
     #modal-yards .modal-sheet { height: 100%; max-height: 640px; }
 
@@ -681,7 +708,6 @@
   <div id="admin-toolbar">
     <span>🔧 РЕЖИМ АДМИНИСТРАТОРА</span>
     <div style="display:flex; gap: 8px; flex-wrap: wrap;">
-      <button class="btn btn-sm btn-green" onclick="saveToGitHub()">💾 Сохранить на GitHub</button>
       <button class="btn btn-sm btn-outline" onclick="adminClearSpots()">🧹 Очистить места</button>
       <button class="btn btn-sm btn-amber" onclick="exitAdmin()">Выйти</button>
     </div>
@@ -702,6 +728,7 @@
     </div>
 
     <div class="header-actions">
+      <button id="btn-install" class="btn btn-sm btn-outline" onclick="createShortcut()" title="Создать ярлык на экране телефона" hidden>📲<span class="btn-label"> Создать ярлык</span></button>
       <button class="btn btn-sm btn-outline" onclick="openQuickLeaveModal()" title="Быстро освободить место">⚡<span class="btn-label"> Я уезжаю</span></button>
       <a id="apk-link" href="https://github.com/minin3418/Parking-apk/releases/latest/download/dvor-parking.apk" class="btn btn-sm btn-download-apk" title="Скачать Android APK" hidden>📥<span class="btn-label"> APK</span></a>
       <button class="btn btn-sm btn-outline" onclick="openAdminModal()" title="Администратор">⚙️</button>
@@ -709,7 +736,8 @@
   </header>
 
   <div id="install-hint" hidden>
-    <span>Установите на iPhone: нажмите «Поделиться» → «На экран „Домой“».</span>
+    <span>Добавьте парковку на экран телефона — будет открываться как приложение.</span>
+    <button class="btn btn-sm btn-green" onclick="createShortcut()">📲 Создать ярлык</button>
     <button class="close-btn" style="font-size:18px;" onclick="dismissInstallHint()">✕</button>
   </div>
 
@@ -803,7 +831,7 @@
 
       <div id="new-yard-card" class="new-yard-card" hidden>
         <div class="new-yard-title" id="new-yard-title">Новый двор</div>
-        <div class="hint-text">Адрес появится в общем списке у всех жителей. Выберите стартовую схему (администратор сможет её перестроить в Android-приложении):</div>
+        <div class="hint-text">Выберите стартовую схему двора (администратор сможет её перестроить в Android-приложении):</div>
         <div id="template-options"></div>
         <button id="btn-create-yard" class="btn btn-green" style="padding: 12px;" onclick="createYardFromSearch()">Создать двор</button>
       </div>
@@ -976,6 +1004,40 @@
     </div>
   </div>
 
+  <!-- MODAL: Create shortcut (browsers without an install prompt, e.g. iPhone Safari) -->
+  <div id="modal-install" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>📲 Создать ярлык</h2>
+        <button class="close-btn" onclick="closeModal('modal-install')">✕</button>
+      </div>
+      <div id="install-steps-ios">
+        <div class="install-step">
+          <span class="install-num">1</span>
+          <span>Нажмите кнопку «Поделиться»
+            <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            внизу экрана Safari (на iPad — вверху).</span>
+        </div>
+        <div class="install-step">
+          <span class="install-num">2</span>
+          <span>Пролистайте меню и выберите <b>«На экран „Домой“»</b>, затем нажмите <b>«Добавить»</b>.</span>
+        </div>
+        <p class="hint-text">Если открыто не в Safari, сначала откройте эту страницу в Safari.</p>
+      </div>
+      <div id="install-steps-other">
+        <div class="install-step">
+          <span class="install-num">1</span>
+          <span>Откройте меню браузера <b>⋮</b> (справа вверху).</span>
+        </div>
+        <div class="install-step">
+          <span class="install-num">2</span>
+          <span>Выберите <b>«Добавить на главный экран»</b> или <b>«Установить приложение»</b>.</span>
+        </div>
+      </div>
+      <button class="btn btn-green" style="padding: 12px;" onclick="closeModal('modal-install')">Понятно</button>
+    </div>
+  </div>
+
   <!-- MODAL: Admin Login -->
   <div id="modal-admin" class="modal-overlay">
     <div class="modal-sheet">
@@ -990,21 +1052,13 @@
       <button class="btn btn-amber" style="padding: 12px;" onclick="submitAdminLogin()">
         Войти в режим администратора
       </button>
-      <div class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
-        <label>GitHub-токен для записи (хранится только на этом устройстве)</label>
-        <input type="password" id="gh-token-input" class="form-control" placeholder="github_pat_…" autocomplete="off">
-        <div class="hint-text" id="gh-token-status"></div>
-        <button class="btn btn-outline" onclick="saveTokenFromInput()">Сохранить токен</button>
-      </div>
     </div>
   </div>
 
   <script>
     /* =====================================================================
-       GITHUB STORAGE (same files as the Android app)
-       yards/<yardId>.json - schema of one yard, yards/index.json - shared address list.
-       Reading needs no token. Writing uses a token entered on this device;
-       the page itself is public, so no token is embedded here.
+       GITHUB STORAGE (same files as the Android app), read-only:
+       yards/<yardId>.json - schema of one yard, yards/index.json - shared address list
        ===================================================================== */
     const GH_REPO = 'minin3418/Parking';
     const GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/';
@@ -1012,11 +1066,6 @@
     const SHARED_INDEX_PATH = 'yards/index.json';
     const ADMIN_PIN = '3418';
     const MASTER_YARD = { id: 'karbysheva_22', address: 'ул. Карбышева, 22 / 22А' };
-    const TOKEN_KEY = 'dvor_gh_token';
-
-    function ghToken() {
-      return localStorage.getItem(TOKEN_KEY) || '';
-    }
 
     function yardPath(yardId) {
       return 'yards/' + yardId + '.json';
@@ -1024,22 +1073,6 @@
 
     function encodePath(path) {
       return path.split('/').map(encodeURIComponent).join('/');
-    }
-
-    function utf8ToBase64(text) {
-      const bytes = new TextEncoder().encode(text);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i += 0x8000) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-      }
-      return btoa(binary);
-    }
-
-    function base64ToUtf8(b64) {
-      const binary = atob(b64.replace(/\s/g, ''));
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      return new TextDecoder().decode(bytes);
     }
 
     /** File text, or null when the file does not exist. */
@@ -1062,33 +1095,6 @@
       return await raw.text();
     }
 
-    /** { sha, text } of a file via the authenticated API; both null when the file does not exist. */
-    async function ghGetMeta(path) {
-      const res = await fetch(GH_API + encodePath(path) + '?ref=main&t=' + Date.now(), {
-        headers: { 'Authorization': 'Bearer ' + ghToken(), 'Accept': 'application/vnd.github.v3+json' },
-        cache: 'no-store'
-      });
-      if (res.status === 404) return { sha: null, text: null };
-      if (!res.ok) throw new Error('GitHub API ' + res.status);
-      const json = await res.json();
-      return { sha: json.sha, text: base64ToUtf8(json.content || '') };
-    }
-
-    async function ghPut(path, text, sha, message) {
-      const body = { message: message, content: utf8ToBase64(text), branch: 'main' };
-      if (sha) body.sha = sha;
-      const res = await fetch(GH_API + encodePath(path), {
-        method: 'PUT',
-        headers: {
-          'Authorization': 'Bearer ' + ghToken(),
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      });
-      return res.status;
-    }
-
     async function loadRemoteYard(yardId) {
       const text = await ghReadRaw(yardPath(yardId));
       return text ? normalizeData(JSON.parse(text)) : null;
@@ -1097,34 +1103,6 @@
     async function loadSharedYards() {
       const text = await ghReadRaw(SHARED_INDEX_PATH);
       return text ? JSON.parse(text) : [];
-    }
-
-    /** Saves yard schema; with createOnly an existing file is left untouched. */
-    async function saveYardToGitHub(yardId, data, message, createOnly) {
-      const meta = await ghGetMeta(yardPath(yardId));
-      if (createOnly && meta.sha) return 'exists';
-      const status = await ghPut(yardPath(yardId), JSON.stringify(data, null, 2), meta.sha, message);
-      if (status < 200 || status >= 300) throw new Error('GitHub API ' + status);
-      return 'saved';
-    }
-
-    /**
-     * Adds an address to the shared list and returns the entry that ends up there:
-     * an existing entry with the same address wins over the new one.
-     */
-    async function addSharedYard(entry) {
-      const key = addressKey(entry.address);
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const meta = await ghGetMeta(SHARED_INDEX_PATH);
-        const list = meta.text ? JSON.parse(meta.text) : [];
-        const existing = list.find(e => e.id === entry.id || addressKey(e.address) === key);
-        if (existing) return existing;
-        const status = await ghPut(SHARED_INDEX_PATH, JSON.stringify(list.concat([entry]), null, 2) + '\n', meta.sha, 'Новый адрес двора: ' + entry.address);
-        if (status >= 200 && status < 300) return entry;
-        // 409/422: someone updated the list at the same time - re-read and retry
-        if (status !== 409 && status !== 422) throw new Error('GitHub API ' + status);
-      }
-      throw new Error('Не удалось обновить общий список адресов');
     }
 
     /* =====================================================================
@@ -1417,27 +1395,13 @@
         const remote = await loadRemoteYard(yardId);
         if (remote) {
           if (!hadLocal) applyRemoteYard(yardId, remote);
-        } else {
-          let starter = loadLocalYard(yardId);
-          if (!starter) {
-            starter = generateTemplate(address, 'STANDARD_2ROWS', null);
-            saveYardData(yardId, starter);
-            if (currentYard && currentYard.id === yardId) {
-              yardData = starter;
-              renderAll();
-              resetMapTransform();
-            }
+        } else if (!loadLocalYard(yardId)) {
+          yardData = generateTemplate(address, 'STANDARD_2ROWS', null);
+          saveYardData(yardId, yardData);
+          if (currentYard && currentYard.id === yardId) {
+            renderAll();
+            resetMapTransform();
           }
-          if (!ghToken()) return;
-          await saveYardToGitHub(yardId, {
-            spots: starter.spots.map(s => Object.assign({}, s, { occupiedBy: null })),
-            landmarks: starter.landmarks,
-            blockers: []
-          }, 'Новый двор (' + address + '): стартовая схема', true);
-        }
-        if (ghToken() && !sharedYards.some(e => e.id === yardId)) {
-          const entry = await addSharedYard({ id: yardId, address: address, createdAt: Date.now() });
-          if (!sharedYards.some(e => e.id === entry.id)) sharedYards.push(entry);
         }
       } catch (e) {
         if (currentYard && currentYard.id === yardId && !loadLocalYard(yardId)) {
@@ -1597,9 +1561,7 @@
       const yardId = normalizeAddressToId(address);
       saveYardData(yardId, generateTemplate(address, template, base));
       openYard(yardId, address, template);
-      showToast(ghToken()
-        ? 'Двор «' + address + '» создан и добавлен в общий список'
-        : 'Двор «' + address + '» создан на этом устройстве');
+      showToast('Двор «' + address + '» создан');
     }
 
     function removeYardFromList(yardId) {
@@ -2138,25 +2100,9 @@
       }
     }
 
-    function updateTokenStatus() {
-      document.getElementById('gh-token-status').textContent = ghToken()
-        ? 'Токен сохранён: новые дворы и схемы публикуются на GitHub.'
-        : 'Токен не задан: новые дворы остаются только на этом устройстве.';
-    }
-
     function openAdminModal() {
       document.getElementById('admin-pin').value = '';
-      document.getElementById('gh-token-input').value = '';
-      updateTokenStatus();
       openModal('modal-admin');
-    }
-
-    function saveTokenFromInput() {
-      const value = document.getElementById('gh-token-input').value.trim();
-      if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY);
-      document.getElementById('gh-token-input').value = '';
-      updateTokenStatus();
-      showToast(value ? 'Токен сохранён на этом устройстве' : 'Токен удалён');
     }
 
     function submitAdminLogin() {
@@ -2176,17 +2122,6 @@
       document.getElementById('admin-toolbar').classList.remove('active');
     }
 
-    async function saveToGitHub() {
-      if (!currentYard || !yardData) return;
-      if (!ghToken()) return showToast('Сначала сохраните GitHub-токен в ⚙️', true);
-      try {
-        await saveYardToGitHub(currentYard.id, yardData, 'Обновление схемы двора (' + currentYard.address + ') из веб-версии', false);
-        showToast('✅ Схема сохранена на GitHub');
-      } catch (e) {
-        showToast('Ошибка сохранения на GitHub: ' + e.message, true);
-      }
-    }
-
     function adminClearSpots() {
       if (!yardData || !confirm('Освободить все места и убрать машины 2-го ряда в этом дворе?')) return;
       yardData.spots.forEach(s => { s.occupiedBy = null; });
@@ -2197,17 +2132,48 @@
     /* =====================================================================
        PLATFORM: install hint, APK link, offline support
        ===================================================================== */
-    function setupPlatformUi() {
-      const ua = navigator.userAgent;
-      const isIos = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    let installPrompt = null;   // Chrome/Edge/Android: deferred beforeinstallprompt event
 
-      document.getElementById('apk-link').hidden = !/Android/i.test(ua) || isStandalone;
-      document.getElementById('install-hint').hidden = !isIos || isStandalone || localStorage.getItem('dvor_install_hint_dismissed') === '1';
+    function isStandalone() {
+      return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    }
+
+    function setupPlatformUi() {
+      const standalone = isStandalone();
+
+      document.getElementById('apk-link').hidden = !/Android/i.test(navigator.userAgent) || standalone;
+      document.getElementById('btn-install').hidden = standalone;
+      document.getElementById('install-hint').hidden = !IS_IOS || standalone || localStorage.getItem('dvor_install_hint_dismissed') === '1';
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        installPrompt = e;
+      });
+      window.addEventListener('appinstalled', () => {
+        installPrompt = null;
+        document.getElementById('btn-install').hidden = true;
+        document.getElementById('install-hint').hidden = true;
+        showToast('Ярлык создан');
+      });
 
       if ('serviceWorker' in navigator && location.protocol === 'https:') {
         navigator.serviceWorker.register('sw.js').catch(() => {});
       }
+    }
+
+    /** System install dialog where the browser offers one, otherwise step-by-step instructions. */
+    async function createShortcut() {
+      if (installPrompt) {
+        const prompt = installPrompt;
+        installPrompt = null;
+        prompt.prompt();
+        await prompt.userChoice.catch(() => null);
+        return;
+      }
+      document.getElementById('install-steps-ios').hidden = !IS_IOS;
+      document.getElementById('install-steps-other').hidden = IS_IOS;
+      openModal('modal-install');
     }
 
     function dismissInstallHint() {
