@@ -369,6 +369,62 @@
       background: var(--bg-dark);
     }
 
+    #survey-view {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px calc(16px + var(--safe-right)) 16px calc(16px + var(--safe-left));
+      flex-direction: column;
+      gap: 14px;
+    }
+    .survey-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .survey-card h2 { font-size: 17px; }
+    .survey-card h3 { font-size: 15px; }
+    #survey-form { display: flex; flex-direction: column; gap: 10px; }
+    .survey-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 6px;
+    }
+    .survey-option.selected { border-color: var(--yard-cyan); background: rgba(0, 229, 255, 0.1); }
+    .survey-option input { accent-color: var(--yard-cyan); }
+    .survey-thanks {
+      background: rgba(0, 230, 118, 0.15);
+      border: 1px solid var(--yard-green);
+      color: var(--yard-green);
+      font-weight: 700;
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .survey-bar { margin-bottom: 10px; font-size: 13px; }
+    .survey-bar-head { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .survey-bar-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .survey-bar-fill { height: 100%; background: var(--yard-cyan); border-radius: 4px; }
+    .survey-comment {
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 8px 0;
+      font-size: 13px;
+    }
+    .survey-comment-head { display: flex; justify-content: space-between; color: var(--yard-cyan); font-weight: 700; }
+    .survey-comment-date { color: var(--text-muted); font-weight: 400; font-size: 11px; }
+    .survey-comment-text { font-style: italic; color: #E0E0E0; margin-top: 4px; }
+
     .spots-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -761,6 +817,7 @@
     <div class="view-toggle">
       <button id="btn-view-map" class="toggle-btn active" onclick="switchView('map')">🗺️ Схема</button>
       <button id="btn-view-list" class="toggle-btn" onclick="switchView('list')">📋 Список</button>
+      <button id="btn-view-survey" class="toggle-btn" onclick="switchView('survey')">📊 Опрос</button>
     </div>
   </div>
 
@@ -802,6 +859,25 @@
     <!-- List View -->
     <div id="list-view">
       <div class="spots-grid" id="spots-list-container"></div>
+    </div>
+
+    <!-- Survey View (same question and answers as the Android app) -->
+    <div id="survey-view">
+      <div class="survey-card">
+        <h2>📊 Опрос жильцов двора</h2>
+        <p class="hint-text">Помогите решить, внедряем ли мы общую систему контроля мест и второго ряда на постоянной основе:</p>
+        <div id="survey-form">
+          <div id="survey-options"></div>
+          <input type="text" id="survey-comment" class="form-control" placeholder="Пожелание или предложение (необязательно)" maxlength="300">
+          <button class="btn btn-green" style="padding: 12px;" onclick="submitSurvey()">Отправить голос</button>
+        </div>
+        <div id="survey-thanks" class="survey-thanks" hidden>✅ Спасибо! Ваш голос уже учтён.</div>
+      </div>
+      <div class="survey-card">
+        <h3 id="survey-results-title">Ответы соседей</h3>
+        <div id="survey-bars"></div>
+        <div id="survey-comments"></div>
+      </div>
     </div>
   </main>
 
@@ -1057,52 +1133,103 @@
 
   <script>
     /* =====================================================================
-       GITHUB STORAGE (same files as the Android app), read-only:
-       yards/<yardId>.json - schema of one yard, yards/index.json - shared address list
+       SHARED DATABASE (Firebase Realtime Database, same layout as the Android app's ParkingCloud):
+         index/<yardId>                  - shared address list: {address, createdAt}
+         yards/<yardId>/schema           - {spots: [...], landmarks: [...]}
+         yards/<yardId>/occupancy/s<id>  - who parked on spot <id>
+         yards/<yardId>/blockers/<id>    - cars in the 2nd row
+         yards/<yardId>/surveys/v<id>    - survey votes
+       Keys are prefixed ("s5", "v1730...") so Firebase never turns these maps into arrays.
        ===================================================================== */
-    const GH_REPO = 'minin3418/Parking';
-    const GH_API = 'https://api.github.com/repos/' + GH_REPO + '/contents/';
-    const GH_RAW = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/';
-    const SHARED_INDEX_PATH = 'yards/index.json';
+    const DB_URL = 'https://dvor-parking-default-rtdb.asia-southeast1.firebasedatabase.app';
     const ADMIN_PIN = '3418';
     const MASTER_YARD = { id: 'karbysheva_22', address: 'ул. Карбышева, 22 / 22А' };
 
-    function yardPath(yardId) {
-      return 'yards/' + yardId + '.json';
+    function dbUrl(path) {
+      return DB_URL + '/' + path.split('/').map(encodeURIComponent).join('/') + '.json';
     }
 
-    function encodePath(path) {
-      return path.split('/').map(encodeURIComponent).join('/');
-    }
-
-    /** File text, or null when the file does not exist. */
-    async function ghReadRaw(path) {
-      try {
-        const res = await fetch(GH_API + encodePath(path) + '?ref=main&t=' + Date.now(), {
-          headers: { 'Accept': 'application/vnd.github.raw+json' },
-          cache: 'no-store'
-        });
-        if (res.status === 404) return null;
-        if (res.ok) return await res.text();
-      } catch (e) {
-        // fall through to the CDN copy
+    async function dbRequest(method, path, body) {
+      const options = { method: method, cache: 'no-store' };
+      if (body !== undefined) {
+        options.headers = { 'Content-Type': 'application/json' };
+        options.body = JSON.stringify(body);
       }
-      // The API allows 60 requests/hour per IP (shared by everyone on a mobile network),
-      // so fall back to the CDN copy, which may lag a few minutes behind
-      const raw = await fetch(GH_RAW + encodePath(path) + '?t=' + Date.now(), { cache: 'no-store' });
-      if (raw.status === 404) return null;
-      if (!raw.ok) throw new Error('GitHub ' + raw.status);
-      return await raw.text();
+      const res = await fetch(dbUrl(path), options);
+      const text = await res.text();
+      if (!res.ok) {
+        const error = new Error('База ' + res.status);
+        error.status = res.status;
+        throw error;
+      }
+      return text ? JSON.parse(text) : null;
     }
 
-    async function loadRemoteYard(yardId) {
-      const text = await ghReadRaw(yardPath(yardId));
-      return text ? normalizeData(JSON.parse(text)) : null;
+    /** [key, value] pairs of a node that Firebase may return either as an object or as an array. */
+    function childEntries(node) {
+      if (!node || typeof node !== 'object') return [];
+      const entries = Array.isArray(node) ? node.map((v, i) => [String(i), v]) : Object.entries(node);
+      return entries.filter(entry => entry[1] != null);
+    }
+
+    /** Raw yards/<id> node -> { spots (with occupiedBy), landmarks, blockers, surveys }, or null without a schema. */
+    function yardFromCloud(raw) {
+      if (!raw || !raw.schema) return null;
+      const occupants = {};
+      childEntries(raw.occupancy).forEach(([key, value]) => {
+        const spotId = parseInt(key.replace(/^s/, ''), 10);
+        if (!isNaN(spotId)) occupants[spotId] = value;
+      });
+      return {
+        spots: childEntries(raw.schema.spots).map(([, s]) => Object.assign({}, s, { occupiedBy: occupants[s.id] || null })),
+        landmarks: childEntries(raw.schema.landmarks).map(([, l]) => l),
+        blockers: childEntries(raw.blockers)
+          .map(([key, b]) => Object.assign({ id: key }, b, { blockedSpots: childEntries(b.blockedSpots).map(([, v]) => v) }))
+          .sort((a, b) => String(a.parkedAt || '').localeCompare(String(b.parkedAt || ''))),
+        surveys: childEntries(raw.surveys).map(([, v]) => v).sort((a, b) => (a.id || 0) - (b.id || 0))
+      };
+    }
+
+    async function loadCloudYard(yardId) {
+      return yardFromCloud(await dbRequest('GET', 'yards/' + yardId));
     }
 
     async function loadSharedYards() {
-      const text = await ghReadRaw(SHARED_INDEX_PATH);
-      return text ? JSON.parse(text) : [];
+      const raw = await dbRequest('GET', 'index');
+      return childEntries(raw)
+        .filter(([, e]) => e && e.address)
+        .map(([id, e]) => ({ id: id, address: e.address, createdAt: e.createdAt }))
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    }
+
+    function schemaOf(data) {
+      return {
+        spots: data.spots.map(s => ({ id: s.id, x: s.x, y: s.y, angle: s.angle || 0 })),
+        landmarks: data.landmarks.map(l => ({ id: l.id, text: l.text, x: l.x, y: l.y }))
+      };
+    }
+
+    /** Publishes a yard created here: its starter schema (unless one exists) and its shared-list entry. */
+    async function publishYard(yardId, address, data) {
+      const existing = await dbRequest('GET', 'yards/' + yardId + '/schema');
+      if (!existing) await dbRequest('PUT', 'yards/' + yardId + '/schema', schemaOf(data));
+      try {
+        await dbRequest('PUT', 'index/' + yardId, { address: address, createdAt: Date.now() });
+      } catch (e) {
+        // 401: the entry already exists - index entries are write-once
+        if (e.status !== 401) throw e;
+      }
+    }
+
+    /** Several changes at once, e.g. { 'occupancy/s3': null, 'blockers/blk_1': null }. */
+    function patchYard(yardId, updates) {
+      return dbRequest('PATCH', 'yards/' + yardId, updates);
+    }
+
+    function nowStamp() {
+      const d = new Date();
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     }
 
     /* =====================================================================
@@ -1367,11 +1494,10 @@
     }
 
     /**
-     * Opens a yard. On the first open on this device the shared schema is pulled from GitHub;
-     * later opens keep the local copy (the refresh button pulls it explicitly).
-     * template: starter schema type when the yard is being created here.
+     * Opens a yard: shows the local copy instantly, then follows the shared database live.
+     * A yard created on this device is published on its first connection.
      */
-    function openYard(yardId, address, template) {
+    function openYard(yardId, address) {
       if (yardData && currentYard) saveYardData(currentYard.id, yardData);
 
       const local = loadLocalYard(yardId);
@@ -1381,57 +1507,86 @@
       isFirstLaunch = false;
       cancelRow2Mode();
 
-      yardData = local || { spots: [], landmarks: [], blockers: [] };
+      yardData = local || { spots: [], landmarks: [], blockers: [], surveys: [] };
       document.getElementById('yard-label').textContent = address;
       renderAll(local ? null : 'Загрузка схемы двора…');
       resetMapTransform();
       closeModal('modal-yards');
 
-      syncOpenedYard(yardId, address, !!local && !template, template);
+      connectLive(yardId, address, !local);
     }
 
-    async function syncOpenedYard(yardId, address, hadLocal, template) {
-      try {
-        const remote = await loadRemoteYard(yardId);
-        if (remote) {
-          if (!hadLocal) applyRemoteYard(yardId, remote);
-        } else if (!loadLocalYard(yardId)) {
-          yardData = generateTemplate(address, 'STANDARD_2ROWS', null);
-          saveYardData(yardId, yardData);
-          if (currentYard && currentYard.id === yardId) {
+    /* Live connection (server-sent events) to yards/<id>; liveRaw mirrors that node. */
+    let liveSource = null;
+    let liveRaw = null;
+
+    function setAt(node, parts, value) {
+      if (!parts.length) return value;
+      const base = node && typeof node === 'object' ? Object.assign({}, node) : {};
+      const next = setAt(base[parts[0]], parts.slice(1), value);
+      if (next == null) delete base[parts[0]]; else base[parts[0]] = next;
+      return Object.keys(base).length ? base : null;
+    }
+
+    function connectLive(yardId, address, fitOnFirstData) {
+      if (liveSource) liveSource.close();
+      liveRaw = null;
+      let firstEvent = true;
+      const source = new EventSource(dbUrl('yards/' + yardId));
+      liveSource = source;
+
+      const onEvent = (e, isPatch) => {
+        if (liveSource !== source) return;
+        const msg = JSON.parse(e.data);
+        const parts = (msg.path || '/').split('/').filter(Boolean);
+        if (isPatch) {
+          Object.entries(msg.data || {}).forEach(([key, value]) => {
+            liveRaw = setAt(liveRaw, parts.concat(key.split('/').filter(Boolean)), value);
+          });
+        } else {
+          liveRaw = setAt(liveRaw, parts, msg.data);
+        }
+        const wasFirst = firstEvent;
+        firstEvent = false;
+        const cloud = yardFromCloud(liveRaw);
+        if (cloud) {
+          yardData = cloud;
+          saveYardData(yardId, cloud);
+          renderAll();
+          if (wasFirst && fitOnFirstData) resetMapTransform();
+        } else if (wasFirst) {
+          // Not in the shared database yet: created on this device (or a list entry without a schema)
+          if (!yardData.spots.length && !yardData.landmarks.length) {
+            yardData = generateTemplate(address, 'STANDARD_2ROWS', null);
+            saveYardData(yardId, yardData);
             renderAll();
             resetMapTransform();
           }
+          publishYard(yardId, address, yardData)
+            .then(syncSharedYards)
+            .catch(() => showToast('Нет связи: двор пока виден только вам', true));
         }
-      } catch (e) {
-        if (currentYard && currentYard.id === yardId && !loadLocalYard(yardId)) {
-          yardData = generateTemplate(address, template || 'STANDARD_2ROWS', null);
-          saveYardData(yardId, yardData);
+      };
+      source.addEventListener('put', (e) => onEvent(e, false));
+      source.addEventListener('patch', (e) => onEvent(e, true));
+      source.addEventListener('cancel', () => source.close());
+      source.onerror = () => {
+        // EventSource reconnects by itself; only an empty first open needs a fallback
+        if (liveSource === source && firstEvent && !yardData.spots.length && !yardData.landmarks.length && !navigator.onLine) {
+          yardData = generateTemplate(address, 'STANDARD_2ROWS', null);
           renderAll();
           resetMapTransform();
-          showToast('Нет связи с GitHub: открыта стартовая схема. Нажмите 🔄 позже.', true);
+          showToast('Нет связи: открыта стартовая схема', true);
         }
-      }
+      };
     }
 
-    /** Replaces the local schema with the remote one, keeping occupants recorded on this device. */
-    function applyRemoteYard(yardId, remote) {
-      const local = loadLocalYard(yardId) || { spots: [], landmarks: [], blockers: [] };
-      const occupants = new Map(local.spots.filter(s => s.occupiedBy).map(s => [s.id, s.occupiedBy]));
-      const merged = {
-        spots: remote.spots.map(s => occupants.has(s.id) ? Object.assign({}, s, { occupiedBy: occupants.get(s.id) }) : s),
-        landmarks: remote.landmarks,
-        blockers: local.blockers.length ? local.blockers : remote.blockers,
-        surveys: remote.surveys
-      };
-      saveYardData(yardId, merged);
-      // The user may have switched yards while the request was in flight
-      if (currentYard && currentYard.id === yardId) {
-        yardData = merged;
-        renderAll();
-        resetMapTransform();
+    // iOS closes connections of a page in the background; reconnect when it comes back
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && currentYard && (!liveSource || liveSource.readyState === 2)) {
+        connectLive(currentYard.id, currentYard.address, false);
       }
-    }
+    });
 
     async function refreshData() {
       if (!currentYard) return;
@@ -1439,19 +1594,36 @@
       btn.disabled = true;
       const yardId = currentYard.id;
       try {
-        const remote = await loadRemoteYard(yardId);
-        if (remote && (remote.spots.length || remote.landmarks.length)) {
-          applyRemoteYard(yardId, remote);
-          showToast('Схема обновлена');
-        } else {
-          showToast('Для этого двора на GitHub ещё нет схемы');
+        const cloud = await loadCloudYard(yardId);
+        if (cloud && currentYard.id === yardId) {
+          yardData = cloud;
+          saveYardData(yardId, cloud);
+          renderAll();
         }
+        // Restart the live connection in case it silently dropped
+        connectLive(yardId, currentYard.address, false);
+        showToast('Данные обновлены');
       } catch (e) {
-        showToast('Нет связи с GitHub', true);
+        showToast('Нет связи с общей базой', true);
       } finally {
         btn.disabled = false;
       }
       syncSharedYards();
+    }
+
+    /** Runs a write to the shared database; on failure tells the user and reloads the real state. */
+    function pushToCloud(failureMessage, write) {
+      const yardId = currentYard.id;
+      write(yardId).catch(() => {
+        showToast(failureMessage, true);
+        loadCloudYard(yardId).then(cloud => {
+          if (cloud && currentYard && currentYard.id === yardId) {
+            yardData = cloud;
+            saveYardData(yardId, cloud);
+            renderAll();
+          }
+        }).catch(() => {});
+      });
     }
 
     /* =====================================================================
@@ -1556,12 +1728,12 @@
       let base = null;
       if (template === 'COPY_KARBYSHEVA') {
         base = loadLocalYard(MASTER_YARD.id);
-        try { base = (await loadRemoteYard(MASTER_YARD.id)) || base; } catch (e) { /* use local copy */ }
+        try { base = (await loadCloudYard(MASTER_YARD.id)) || base; } catch (e) { /* use local copy */ }
       }
       const yardId = normalizeAddressToId(address);
       saveYardData(yardId, generateTemplate(address, template, base));
-      openYard(yardId, address, template);
-      showToast('Двор «' + address + '» создан');
+      openYard(yardId, address);
+      showToast('Двор «' + address + '» создан и виден всем жителям');
     }
 
     function removeYardFromList(yardId) {
@@ -1583,6 +1755,7 @@
       renderMap(emptyMessage);
       renderList();
       updateCounters();
+      if (document.getElementById('survey-view').style.display === 'flex') renderSurvey();
     }
 
     function updateCounters() {
@@ -1855,24 +2028,86 @@
 
     function switchView(view) {
       const map = document.getElementById('map-viewport');
-      const list = document.getElementById('list-view');
-      const btnMap = document.getElementById('btn-view-map');
-      const btnList = document.getElementById('btn-view-list');
+      const wasMapHidden = map.style.display === 'none';
+      map.style.display = view === 'map' ? 'flex' : 'none';
+      document.getElementById('list-view').style.display = view === 'list' ? 'block' : 'none';
+      document.getElementById('survey-view').style.display = view === 'survey' ? 'flex' : 'none';
+      document.getElementById('btn-view-map').classList.toggle('active', view === 'map');
+      document.getElementById('btn-view-list').classList.toggle('active', view === 'list');
+      document.getElementById('btn-view-survey').classList.toggle('active', view === 'survey');
+      // Fitting needs the viewport size, which is 0 while the map is hidden
+      if (view === 'map' && wasMapHidden) resetMapTransform();
+      if (view === 'survey') renderSurvey();
+    }
 
-      if (view === 'map') {
-        const wasHidden = map.style.display === 'none';
-        map.style.display = 'flex';
-        list.style.display = 'none';
-        btnMap.classList.add('active');
-        btnList.classList.remove('active');
-        // Fitting needs the viewport size, which is 0 while the map is hidden
-        if (wasHidden) resetMapTransform();
-      } else {
-        map.style.display = 'none';
-        list.style.display = 'block';
-        btnList.classList.add('active');
-        btnMap.classList.remove('active');
+    /* =====================================================================
+       SURVEY - votes are shared per yard: yards/<id>/surveys/v<id>
+       ===================================================================== */
+    const SURVEY_OPTIONS = [
+      { label: '👍 Буду пользоваться', value: 'Буду пользоваться' },
+      { label: '🤝 Если все будут, то да', value: 'Если все будут, то да' },
+      { label: '👎 Не нужно / Сложно', value: 'Не нужно / Сложно' }
+    ];
+
+    function votedKey(yardId) {
+      return 'dvor_survey_voted_' + yardId;
+    }
+
+    function renderSurvey() {
+      if (!currentYard || !yardData) return;
+      const voted = localStorage.getItem(votedKey(currentYard.id)) === '1';
+      document.getElementById('survey-form').hidden = voted;
+      document.getElementById('survey-thanks').hidden = !voted;
+
+      const optionsBox = document.getElementById('survey-options');
+      if (!optionsBox.childElementCount) {
+        optionsBox.innerHTML = SURVEY_OPTIONS.map((o, i) => `
+          <label class="survey-option${i === 0 ? ' selected' : ''}">
+            <input type="radio" name="survey-answer" value="${esc(o.value)}"${i === 0 ? ' checked' : ''}>
+            <span>${esc(o.label)}</span>
+          </label>
+        `).join('');
+        optionsBox.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
+          optionsBox.querySelectorAll('.survey-option').forEach(o => o.classList.remove('selected'));
+          input.closest('.survey-option').classList.add('selected');
+        }));
       }
+
+      const votes = yardData.surveys || [];
+      document.getElementById('survey-results-title').textContent = `Ответы соседей (${votes.length})`;
+      document.getElementById('survey-bars').innerHTML = votes.length ? SURVEY_OPTIONS.map(o => {
+        const count = votes.filter(v => v.answer === o.value).length;
+        const percent = Math.round(count * 100 / votes.length);
+        return `
+          <div class="survey-bar">
+            <div class="survey-bar-head"><span>${esc(o.label)}</span><b>${count} (${percent}%)</b></div>
+            <div class="survey-bar-track"><div class="survey-bar-fill" style="width:${percent}%"></div></div>
+          </div>`;
+      }).join('') : '<div class="hint-text">Пока ответов нет. Будьте первыми!</div>';
+
+      document.getElementById('survey-comments').innerHTML = votes.filter(v => v.comment).slice().reverse().map(v => `
+        <div class="survey-comment">
+          <div class="survey-comment-head"><span>${esc(v.answer)}</span><span class="survey-comment-date">${esc((v.date || '').replace('T', ' ').slice(0, 16))}</span></div>
+          <div class="survey-comment-text">💬 «${esc(v.comment)}»</div>
+        </div>
+      `).join('');
+    }
+
+    function submitSurvey() {
+      if (!currentYard || !yardData) return;
+      const checked = document.querySelector('input[name="survey-answer"]:checked');
+      const vote = {
+        id: Date.now(),
+        answer: checked ? checked.value : SURVEY_OPTIONS[0].value,
+        comment: document.getElementById('survey-comment').value.trim(),
+        date: nowStamp()
+      };
+      yardData.surveys = (yardData.surveys || []).concat([vote]);
+      localStorage.setItem(votedKey(currentYard.id), '1');
+      document.getElementById('survey-comment').value = '';
+      persist();
+      pushToCloud('Нет связи: голос не отправлен', id => dbRequest('PUT', `yards/${id}/surveys/v${vote.id}`, vote));
+      showToast('Спасибо! Ваш голос записан.');
     }
 
     /* =====================================================================
@@ -1960,15 +2195,18 @@
 
       const spot = yardData.spots.find(s => s.id === spotId);
       if (spot) {
-        spot.occupiedBy = {
+        const occupant = {
           carNumber: plate,
           phone: phone,
           apt: apt,
           leaveTime: leave,
-          parkedAt: new Date().toISOString()
+          parkedAt: nowStamp()
         };
+        spot.occupiedBy = occupant;
         closeModal('modal-park');
         persist();
+        pushToCloud('Нет связи: место №' + spotId + ' не отмечено у соседей',
+          id => dbRequest('PUT', `yards/${id}/occupancy/s${spotId}`, occupant));
       }
     }
 
@@ -1987,6 +2225,8 @@
         spot.occupiedBy = null;
         closeModal('modal-spot-details');
         persist();
+        pushToCloud('Нет связи: место №' + spotId + ' не освобождено у соседей',
+          id => dbRequest('DELETE', `yards/${id}/occupancy/s${spotId}`));
       } else {
         showToast('Неверные 4 цифры телефона владельца', true);
       }
@@ -2037,17 +2277,20 @@
       localStorage.setItem('dvor_user_plate', plate);
       localStorage.setItem('dvor_user_phone', phone);
 
-      yardData.blockers.push({
+      const blocker = {
         id: 'blk_' + Date.now(),
         carNumber: plate,
         phone: phone,
         leaveTime: leave,
-        blockedSpots: Array.from(selectedRow2Spots),
-        parkedAt: new Date().toISOString()
-      });
+        blockedSpots: Array.from(selectedRow2Spots).sort((a, b) => a - b),
+        parkedAt: nowStamp()
+      };
+      yardData.blockers.push(blocker);
       selectedRow2Spots.clear();
       closeModal('modal-blocker');
       persist();
+      pushToCloud('Нет связи: машина во 2-м ряду не видна соседям',
+        id => dbRequest('PUT', `yards/${id}/blockers/${blocker.id}`, blocker));
     }
 
     function submitLeaveBlocker() {
@@ -2062,6 +2305,8 @@
         yardData.blockers.splice(idx, 1);
         closeModal('modal-blocker-details');
         persist();
+        pushToCloud('Нет связи: выезд из 2-го ряда не виден соседям',
+          id => dbRequest('DELETE', `yards/${id}/blockers/${blkId}`));
       } else {
         showToast('Неверные 4 цифры телефона владельца', true);
       }
@@ -2079,21 +2324,23 @@
       const digits = document.getElementById('quick-leave-digits').value.trim();
       if (digits.length !== 4) return showToast('Введите ровно 4 последние цифры', true);
 
-      let freed = false;
+      const updates = {};
       yardData.spots.forEach(spot => {
         if (spot.occupiedBy && phoneMatches(spot.occupiedBy.phone, digits)) {
           spot.occupiedBy = null;
-          freed = true;
+          updates['occupancy/s' + spot.id] = null;
         }
       });
+      yardData.blockers = yardData.blockers.filter(b => {
+        if (!phoneMatches(b.phone, digits)) return true;
+        updates['blockers/' + b.id] = null;
+        return false;
+      });
 
-      const initialCount = yardData.blockers.length;
-      yardData.blockers = yardData.blockers.filter(b => !phoneMatches(b.phone, digits));
-      if (yardData.blockers.length < initialCount) freed = true;
-
-      if (freed) {
+      if (Object.keys(updates).length) {
         closeModal('modal-quick-leave');
         persist();
+        pushToCloud('Нет связи: выезд не виден соседям', id => patchYard(id, updates));
         showToast('Место освобождено. Счастливого пути!');
       } else {
         showToast('Автомобиль с таким телефоном не найден', true);
@@ -2124,9 +2371,15 @@
 
     function adminClearSpots() {
       if (!yardData || !confirm('Освободить все места и убрать машины 2-го ряда в этом дворе?')) return;
-      yardData.spots.forEach(s => { s.occupiedBy = null; });
+      const updates = {};
+      yardData.spots.forEach(s => {
+        if (s.occupiedBy) updates['occupancy/s' + s.id] = null;
+        s.occupiedBy = null;
+      });
+      yardData.blockers.forEach(b => { updates['blockers/' + b.id] = null; });
       yardData.blockers = [];
       persist();
+      if (Object.keys(updates).length) pushToCloud('Нет связи: изменения не видны соседям', id => patchYard(id, updates));
     }
 
     /* =====================================================================
