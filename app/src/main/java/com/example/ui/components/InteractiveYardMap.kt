@@ -8,8 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -120,100 +122,157 @@ fun InteractiveYardMap(
         val totalOffsetX = (containerWidth - contentWidth) / 2f + offsetX
         val totalOffsetY = (containerHeight - contentHeight) / 2f + offsetY
 
+        // Use rememberUpdatedState so pointerInput(Unit) never gets cancelled during active gesture
+        val currentData by androidx.compose.runtime.rememberUpdatedState(data)
+        val currentIsEditMode by androidx.compose.runtime.rememberUpdatedState(isEditMode)
+        val currentSelectedSpotId by androidx.compose.runtime.rememberUpdatedState(selectedEditSpotId)
+        val currentSelectedLandmarkId by androidx.compose.runtime.rememberUpdatedState(selectedEditLandmarkId)
+        val currentOnSpotClick by androidx.compose.runtime.rememberUpdatedState(onSpotClick)
+        val currentOnBlockerClick by androidx.compose.runtime.rememberUpdatedState(onBlockerClick)
+        val currentOnLandmarkClick by androidx.compose.runtime.rememberUpdatedState(onLandmarkClick)
+        val currentOnSpotDrag by androidx.compose.runtime.rememberUpdatedState(onSpotDrag)
+        val currentOnLandmarkDrag by androidx.compose.runtime.rememberUpdatedState(onLandmarkDrag)
+        val currentOnMapEmptyClick by androidx.compose.runtime.rememberUpdatedState(onMapEmptyClick)
+
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(data, isEditMode, selectedEditSpotId, selectedEditLandmarkId, effectiveScale, totalOffsetX, totalOffsetY) {
-                    detectTransformGestures { centroid, pan, zoom, _ ->
-                        val screenVx = (centroid.x - totalOffsetX) / effectiveScale
-                        val screenVy = (centroid.y - totalOffsetY) / effectiveScale
-                        var handledByItemDrag = false
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var isDragging = false
+                        var totalMovement = 0f
+                        val touchSlop = viewConfiguration.touchSlop
 
-                        if (isEditMode && zoom == 1f) {
-                            if (selectedEditSpotId != null && onSpotDrag != null) {
-                                val spot = data?.spots?.find { it.id == selectedEditSpotId }
-                                if (spot != null && hypot(screenVx - spot.x, screenVy - spot.y) < 60f) {
-                                    onSpotDrag(spot.id, pan.x / effectiveScale, pan.y / effectiveScale)
-                                    handledByItemDrag = true
+                        // Check if touching a selected edit item
+                        var dragSpotId: Int? = null
+                        var dragLandmarkId: String? = null
+
+                        if (currentIsEditMode) {
+                            val vx = (down.position.x - totalOffsetX) / effectiveScale
+                            val vy = (down.position.y - totalOffsetY) / effectiveScale
+                            if (currentSelectedSpotId != null) {
+                                val s = currentData?.spots?.find { it.id == currentSelectedSpotId }
+                                if (s != null && hypot(vx - s.x, vy - s.y) < 50f) {
+                                    dragSpotId = s.id
                                 }
-                            } else if (selectedEditLandmarkId != null && onLandmarkDrag != null) {
-                                val lm = data?.landmarks?.find { it.id == selectedEditLandmarkId }
-                                if (lm != null && hypot(screenVx - lm.x, screenVy - lm.y) < 60f) {
-                                    onLandmarkDrag(lm.id, pan.x / effectiveScale, pan.y / effectiveScale)
-                                    handledByItemDrag = true
+                            } else if (currentSelectedLandmarkId != null) {
+                                val lm = currentData?.landmarks?.find { it.id == currentSelectedLandmarkId }
+                                if (lm != null && hypot(vx - lm.x, vy - lm.y) < 50f) {
+                                    dragLandmarkId = lm.id
                                 }
                             }
                         }
 
-                        if (!handledByItemDrag) {
-                            scale = (scale * zoom).coerceIn(0.8f, 4.0f)
-                            val maxPanX = (VIRTUAL_WIDTH * baseScale * scale) / 2f
-                            val maxPanY = (VIRTUAL_HEIGHT * baseScale * scale) / 2f
-                            offsetX = (offsetX + pan.x).coerceIn(-maxPanX, maxPanX)
-                            offsetY = (offsetY + pan.y).coerceIn(-maxPanY, maxPanY)
-                        }
-                    }
-                }
-                .pointerInput(data, isRow2Mode, isEditMode, selectedEditSpotId, selectedEditLandmarkId, scale, offsetX, offsetY) {
-                    detectTapGestures { tapOffset ->
-                        val vx = (tapOffset.x - totalOffsetX) / effectiveScale
-                        val vy = (tapOffset.y - totalOffsetY) / effectiveScale
+                        do {
+                            val event = awaitPointerEvent()
+                            val canceled = event.changes.any { it.isConsumed }
+                            if (canceled) break
 
-                        if (isEditMode) {
-                            // 1. In edit mode, check landmarks first
-                            for (lm in data?.landmarks ?: emptyList()) {
-                                if (hypot(vx - lm.x, vy - lm.y) < 42f) {
-                                    onLandmarkClick(lm)
-                                    return@detectTapGestures
+                            val activeChanges = event.changes.filter { it.pressed }
+                            if (activeChanges.isEmpty()) break
+
+                            if (activeChanges.size == 1) {
+                                val change = activeChanges.first()
+                                val pan = change.position - change.previousPosition
+                                totalMovement += pan.getDistance()
+
+                                if (!isDragging && totalMovement > touchSlop) {
+                                    isDragging = true
+                                }
+
+                                if (isDragging) {
+                                    change.consume()
+                                    if (dragSpotId != null && currentOnSpotDrag != null) {
+                                        currentOnSpotDrag?.invoke(dragSpotId, pan.x / effectiveScale, pan.y / effectiveScale)
+                                    } else if (dragLandmarkId != null && currentOnLandmarkDrag != null) {
+                                        currentOnLandmarkDrag?.invoke(dragLandmarkId, pan.x / effectiveScale, pan.y / effectiveScale)
+                                    } else {
+                                        // Smooth 1-finger canvas panning with fluid bounds
+                                        val maxPanX = (containerWidth * 1.5f * scale).coerceAtLeast(400f)
+                                        val maxPanY = (containerHeight * 1.5f * scale).coerceAtLeast(400f)
+                                        offsetX = (offsetX + pan.x).coerceIn(-maxPanX, maxPanX)
+                                        offsetY = (offsetY + pan.y).coerceIn(-maxPanY, maxPanY)
+                                    }
+                                }
+                            } else if (activeChanges.size >= 2) {
+                                isDragging = true
+                                val zoom = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                activeChanges.forEach { it.consume() }
+
+                                scale = (scale * zoom).coerceIn(0.7f, 4.5f)
+                                val maxPanX = (containerWidth * 1.5f * scale).coerceAtLeast(400f)
+                                val maxPanY = (containerHeight * 1.5f * scale).coerceAtLeast(400f)
+                                offsetX = (offsetX + pan.x).coerceIn(-maxPanX, maxPanX)
+                                offsetY = (offsetY + pan.y).coerceIn(-maxPanY, maxPanY)
+                            }
+                        } while (event.changes.any { it.pressed })
+
+                        // If the user tapped without dragging past slop, process tap selection
+                        if (!isDragging) {
+                            val tapX = down.position.x
+                            val tapY = down.position.y
+                            val vx = (tapX - totalOffsetX) / effectiveScale
+                            val vy = (tapY - totalOffsetY) / effectiveScale
+
+                            if (currentIsEditMode) {
+                                // 1. Landmarks
+                                val hitLm = currentData?.landmarks?.firstOrNull { lm ->
+                                    hypot(vx - lm.x, vy - lm.y) < 46f
+                                }
+                                if (hitLm != null) {
+                                    currentOnLandmarkClick(hitLm)
+                                    return@awaitEachGesture
+                                }
+
+                                // 2. Spots
+                                var closestSpot: ParkingSpot? = null
+                                var minDist = 42f
+                                for (spot in currentData?.spots ?: emptyList()) {
+                                    val dist = hypot(vx - spot.x, vy - spot.y)
+                                    if (dist < minDist) {
+                                        minDist = dist
+                                        closestSpot = spot
+                                    }
+                                }
+                                if (closestSpot != null) {
+                                    currentOnSpotClick(closestSpot)
+                                    return@awaitEachGesture
+                                }
+
+                                // 3. Empty map click -> deselect
+                                currentOnMapEmptyClick?.invoke()
+                                return@awaitEachGesture
+                            }
+
+                            // User Mode:
+                            // 1. Blockers
+                            val blockers = currentData?.blockers ?: emptyList()
+                            val spots = currentData?.spots ?: emptyList()
+                            for (blocker in blockers) {
+                                val targets = spots.filter { blocker.blockedSpots.contains(it.id) }
+                                val avgX = if (targets.isNotEmpty()) targets.map { it.x }.average().toFloat() else 480f
+                                val avgY = 195f
+                                if (hypot(vx - avgX, vy - avgY) < 40f) {
+                                    currentOnBlockerClick(blocker)
+                                    return@awaitEachGesture
                                 }
                             }
 
-                            // 2. Check spots
+                            // 2. Spots
                             var closestSpot: ParkingSpot? = null
-                            var minDistance = 38f
-                            for (spot in data?.spots ?: emptyList()) {
+                            var minDist = 40f
+                            for (spot in spots) {
                                 val dist = hypot(vx - spot.x, vy - spot.y)
-                                if (dist < minDistance) {
-                                    minDistance = dist
+                                if (dist < minDist) {
+                                    minDist = dist
                                     closestSpot = spot
                                 }
                             }
                             if (closestSpot != null) {
-                                onSpotClick(closestSpot)
-                                return@detectTapGestures
+                                currentOnSpotClick(closestSpot)
                             }
-
-                            // 3. Tapped empty space -> deselect
-                            onMapEmptyClick?.invoke()
-                            return@detectTapGestures
-                        }
-
-                        // Normal user mode:
-                        // 1. Check blockers first
-                        val blockers = data?.blockers ?: emptyList()
-                        val spots = data?.spots ?: emptyList()
-                        for (blocker in blockers) {
-                            val targets = spots.filter { blocker.blockedSpots.contains(it.id) }
-                            val avgX = if (targets.isNotEmpty()) targets.map { it.x }.average().toFloat() else 480f
-                            val avgY = 195f
-                            if (hypot(vx - avgX, vy - avgY) < 36f) {
-                                onBlockerClick(blocker)
-                                return@detectTapGestures
-                            }
-                        }
-
-                        // 2. Check spots
-                        var closestSpot: ParkingSpot? = null
-                        var minDistance = 35f
-                        for (spot in spots) {
-                            val dist = hypot(vx - spot.x, vy - spot.y)
-                            if (dist < minDistance) {
-                                minDistance = dist
-                                closestSpot = spot
-                            }
-                        }
-                        if (closestSpot != null) {
-                            onSpotClick(closestSpot)
                         }
                     }
                 }

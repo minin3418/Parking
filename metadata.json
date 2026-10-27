@@ -1,6 +1,6 @@
 {
-  "name": "Двор Парковка на всех",
-  "description": "Интерактивная карта и управление парковкой двора проба на Владивосток",
+  "name": "Двор Парковка",
+  "description": "Интерактивная карта и управление парковкой двора для любого адреса",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

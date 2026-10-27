@@ -31,13 +31,15 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Ensure Gradle Wrapper exists
+      - name: Ensure Gradle Wrapper and Permissions
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "gradlew not found in repository, generating wrapper..."
-            gradle wrapper --gradle-version 9.3.1
+            echo "Generating gradlew wrapper..."
+            gradle wrapper --gradle-version 9.3.1 || true
           fi
-          chmod +x gradlew
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew || true
+          fi
 
       - name: Prepare environment and keystore
         run: |
@@ -50,11 +52,19 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          ./gradlew testDebugUnitTest --continue || true
+          if [ -f "./gradlew" ]; then
+            ./gradlew testDebugUnitTest --continue || true
+          else
+            gradle testDebugUnitTest --continue || true
+          fi
 
       - name: Build Debug APK
         run: |
-          ./gradlew assembleDebug --stacktrace
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
       - name: Prepare APK Artifacts
         run: |
