@@ -427,9 +427,10 @@ fun ParkingScreen(
                     selectedSpotIds = state.row2SelectedSpotIds,
                     initialCar = state.myCarNumber,
                     initialPhone = state.myPhone,
+                    initialApt = state.myApt,
                     onCancel = { viewModel.cancelRow2Mode() },
-                    onSubmit = { car, phone, time ->
-                        viewModel.parkRow2(car, phone, time)
+                    onSubmit = { car, phone, apt, time ->
+                        viewModel.parkRow2(car, phone, apt, time)
                     }
                 )
             }

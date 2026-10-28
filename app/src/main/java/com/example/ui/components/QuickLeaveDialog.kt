@@ -60,7 +60,8 @@ fun QuickLeaveDialog(
 
     val carLabel = when (target) {
         is LeaveTarget.SpotTarget -> target.spot.occupiedBy?.carNumber ?: ""
-        is LeaveTarget.BlockerTarget -> target.blocker.carNumber
+        is LeaveTarget.BlockerTarget -> target.blocker.carNumber +
+            (if (!target.blocker.apt.isNullOrBlank()) ", кв. ${target.blocker.apt}" else "")
     }
 
     AlertDialog(

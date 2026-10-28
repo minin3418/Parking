@@ -164,7 +164,9 @@ fun SpotDetailSheet(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Авто: ${blocker.carNumber} (до ${blocker.leaveTime ?: "утра"})",
+                            text = "Авто: ${blocker.carNumber}" +
+                                (if (!blocker.apt.isNullOrBlank()) ", кв. ${blocker.apt}" else "") +
+                                " (до ${blocker.leaveTime ?: "утра"})",
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium

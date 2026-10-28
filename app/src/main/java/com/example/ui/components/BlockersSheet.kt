@@ -72,12 +72,14 @@ fun Row2SelectionBottomBar(
     selectedSpotIds: Set<Int>,
     initialCar: String,
     initialPhone: String,
+    initialApt: String,
     onCancel: () -> Unit,
-    onSubmit: (car: String, phone: String, time: String) -> Unit,
+    onSubmit: (car: String, phone: String, apt: String, time: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var car by remember { mutableStateOf(initialCar) }
     var phone by remember { mutableStateOf(initialPhone) }
+    var apt by remember { mutableStateOf(initialApt) }
     var time by remember { mutableStateOf("08:30 утра") }
 
     Surface(
@@ -179,25 +181,43 @@ fun Row2SelectionBottomBar(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            OutlinedTextField(
-                value = time,
-                onValueChange = { time = it },
-                label = { Text("Уеду в... (напр. 08:30 утра)") },
-                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = YardAmber) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = YardAmber,
-                    unfocusedBorderColor = DarkBorder,
-                    focusedTextColor = DarkTextPrimary,
-                    unfocusedTextColor = DarkTextPrimary
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = apt,
+                    onValueChange = { apt = it },
+                    label = { Text("Квартира") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .weight(0.8f)
+                        .testTag("input_row2_apt"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = YardAmber,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = DarkTextPrimary,
+                        unfocusedTextColor = DarkTextPrimary
+                    )
                 )
-            )
+
+                OutlinedTextField(
+                    value = time,
+                    onValueChange = { time = it },
+                    label = { Text("Уеду в...") },
+                    leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = YardAmber) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1.4f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = YardAmber,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = DarkTextPrimary,
+                        unfocusedTextColor = DarkTextPrimary
+                    )
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
-                onClick = { onSubmit(car, phone, time) },
+                onClick = { onSubmit(car, phone, apt, time) },
                 enabled = selectedSpotIds.isNotEmpty() && car.isNotBlank() && phone.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = YardAmber),
                 modifier = Modifier
@@ -339,6 +359,15 @@ fun BlockerCard(
                         )
                     }
                 }
+            }
+
+            if (!blocker.apt.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Кв. ${blocker.apt}",
+                    fontSize = 13.sp,
+                    color = DarkTextSecondary
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))

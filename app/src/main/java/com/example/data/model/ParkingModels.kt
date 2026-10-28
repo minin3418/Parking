@@ -38,6 +38,7 @@ data class ParkingBlocker(
     @Json(name = "id") val id: String = "",
     @Json(name = "carNumber") val carNumber: String = "",
     @Json(name = "phone") val phone: String = "",
+    @Json(name = "apt") val apt: String? = null,
     @Json(name = "leaveTime") val leaveTime: String? = null,
     @Json(name = "blockedSpots") val blockedSpots: List<Int> = emptyList(),
     @Json(name = "parkedAt") val parkedAt: String? = null

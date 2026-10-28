@@ -644,14 +644,14 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun parkRow2(carNumber: String, phone: String, leaveTime: String) {
+    fun parkRow2(carNumber: String, phone: String, apt: String, leaveTime: String) {
         val selected = _uiState.value.row2SelectedSpotIds.toList().sorted()
         if (selected.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "Выберите на карте хотя бы одно место, которое перекрыли!") }
             return
         }
         viewModelScope.launch {
-            saveResidentProfile(carNumber, phone, _uiState.value.myApt)
+            saveResidentProfile(carNumber, phone, apt)
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val currentYardId = _uiState.value.currentYardId
 
@@ -661,6 +661,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                     id = "b_${System.currentTimeMillis()}",
                     carNumber = carNumber.trim().uppercase(),
                     phone = phone.trim(),
+                    apt = apt.trim(),
                     leaveTime = leaveTime.trim(),
                     blockedSpots = selected,
                     parkedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())

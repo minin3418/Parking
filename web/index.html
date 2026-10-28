@@ -1156,6 +1156,10 @@
         <input type="tel" id="blocker-phone" class="form-control" placeholder="+7 999 123-45-67">
       </div>
       <div class="form-group">
+        <label>Квартира</label>
+        <input type="text" id="blocker-apt" class="form-control" placeholder="Например: кв. 45">
+      </div>
+      <div class="form-group">
         <label>Когда планируете уехать? *</label>
         <input type="text" id="blocker-leave" class="form-control" placeholder="Например: 08:00 (уеду рано)">
       </div>
@@ -1181,6 +1185,10 @@
         <div class="info-row">
           <span class="info-label">Телефон:</span>
           <span class="info-val" id="blk-detail-phone">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Квартира:</span>
+          <span class="info-val" id="blk-detail-apt">--</span>
         </div>
         <div class="info-row">
           <span class="info-label">Перекрыл места:</span>
@@ -2369,6 +2377,7 @@
       document.getElementById('detail-blocker-id').value = blocker.id;
       document.getElementById('blk-detail-plate').textContent = blocker.carNumber;
       document.getElementById('blk-detail-phone').innerHTML = blocker.phone ? `<a href="tel:${esc(blocker.phone)}">📞 ${esc(blocker.phone)}</a>` : 'Не указан';
+      document.getElementById('blk-detail-apt').textContent = blocker.apt || 'Не указана';
       document.getElementById('blk-detail-spots').textContent = (blocker.blockedSpots || []).map(s => '№' + s).join(', ');
       document.getElementById('blk-detail-leave').textContent = blocker.leaveTime || 'Не указано';
       document.getElementById('blk-leave-digits').value = '';
@@ -2471,6 +2480,7 @@
       document.getElementById('blocker-spots-tags').textContent = Array.from(selectedRow2Spots).map(s => '№' + s).join(', ');
       document.getElementById('blocker-plate').value = localStorage.getItem('dvor_user_plate') || '';
       document.getElementById('blocker-phone').value = localStorage.getItem('dvor_user_phone') || '';
+      document.getElementById('blocker-apt').value = localStorage.getItem('dvor_user_apt') || '';
       document.getElementById('blocker-leave').value = '';
       openModal('modal-blocker');
     }
@@ -2478,6 +2488,7 @@
     function submitBlocker() {
       const plate = document.getElementById('blocker-plate').value.trim().toUpperCase();
       const phone = document.getElementById('blocker-phone').value.trim();
+      const apt = document.getElementById('blocker-apt').value.trim();
       const leave = document.getElementById('blocker-leave').value.trim();
 
       if (!plate) return showToast('Укажите госномер вашего автомобиля', true);
@@ -2485,11 +2496,13 @@
 
       localStorage.setItem('dvor_user_plate', plate);
       localStorage.setItem('dvor_user_phone', phone);
+      if (apt) localStorage.setItem('dvor_user_apt', apt);
 
       const blocker = {
         id: 'blk_' + Date.now(),
         carNumber: plate,
         phone: phone,
+        apt: apt,
         leaveTime: leave,
         blockedSpots: Array.from(selectedRow2Spots).sort((a, b) => a - b),
         parkedAt: nowStamp()
