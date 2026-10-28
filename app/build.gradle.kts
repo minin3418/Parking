@@ -13,7 +13,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.dvorparking.nujjou"
+    applicationId = "ru.dvorparking.app"
     minSdk = 24
     targetSdk = 36
     // Every CI build gets its own version: GitHub Actions run number (build 17 -> 1.17).
