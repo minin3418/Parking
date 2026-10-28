@@ -3017,7 +3017,9 @@
     function setupPlatformUi() {
       const standalone = isStandalone();
 
-      document.getElementById('apk-link').hidden = !/Android/i.test(navigator.userAgent) || standalone;
+      // Everywhere except iPhone/iPad (an APK can't be installed there): on a computer it is
+      // handy to download the file and pass it to a phone
+      document.getElementById('apk-link').hidden = IS_IOS || standalone;
       document.getElementById('btn-install').hidden = standalone;
       document.getElementById('install-hint').hidden = !IS_IOS || standalone || localStorage.getItem('dvor_install_hint_dismissed') === '1';
 
